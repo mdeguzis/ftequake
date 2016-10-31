@@ -1246,7 +1246,9 @@ static char *TP_ParseMacroString (char *s)
 		// check %[P], etc
 		if (*s == '%' && s[1]=='[' && s[2] && s[3]==']')
 		{
+#ifdef QUAKESTATS
 			static char mbuf[MAX_MACRO_VALUE];
+#endif
 			switch (s[2]) {
 #ifdef QUAKESTATS
 			case 'a':
@@ -2132,7 +2134,7 @@ static void TP_EnemyColor_f (void)
 void TP_NewMap (void)
 {
 	static char last_map[MAX_QPATH];
-	char locname[MAX_OSPATH];
+	char locname[MAX_QPATH];
 
 	memset (&vars, 0, sizeof(vars));
 	TP_FindModelNumbers ();
@@ -3509,7 +3511,7 @@ qbool TP_CheckSoundTrigger (char *str)
 {
 	int		i, j;
 	int		start, length;
-	char	soundname[MAX_OSPATH];
+	char	soundname[MAX_QPATH];
 
 	if (!*str)
 		return false;

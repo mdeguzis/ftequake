@@ -48,7 +48,7 @@ static void VARGS QC_snprintfz (char *dest, size_t size, const char *fmt, ...)
 {
 	va_list args;
 	va_start (args, fmt);
-	vsnprintf (dest, size-1, fmt, args);
+	_vsnprintf (dest, size-1, fmt, args);
 	va_end (args);
 	//make sure its terminated.
 	dest[size-1] = 0;
@@ -76,7 +76,7 @@ int		CheckParm (char *check);
 int 	SafeOpenWrite (char *filename, int maxsize);
 int 	SafeOpenRead (char *filename);
 void 	SafeRead (int handle, void *buffer, long count);
-void 	SafeWrite (int handle, void *buffer, long count);
+void 	SafeWrite (int handle, const void *buffer, long count);
 pbool	SafeClose(int hand);
 int SafeSeek(int hand, int ofs, int mode);
 void 	*SafeMalloc (long size);

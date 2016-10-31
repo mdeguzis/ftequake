@@ -267,14 +267,10 @@ int maxdots;
 int mindot;
 int dotofs;
 
-static void MenuTooltipSplit(menu_t *menu, const char *text)
+static void MenuTooltipChange(menu_t *menu, const char *text)
 {
-	char buf[1024];
-	char *c, *space;
-	int lines, lnsize, txsize;
-	int lnmax;
+	unsigned int MAX_CHARS=1024;
 	menutooltip_t *mtt;
-
 	if (menu->tooltip)
 	{
 		Z_Free(menu->tooltip);
@@ -284,85 +280,9 @@ static void MenuTooltipSplit(menu_t *menu, const char *text)
 	if (!text || !text[0] || vid.width < 320 || vid.height < 200)
 		return;
 
-	// calc a line maximum, use a third of the screen or 30 characters, whichever is bigger
-	lnmax = (vid.width / 24) - 2;
-	if (lnmax < 30)
-		lnmax = 30;
-	// word wrap
-	lines = 1;
-	lnsize = txsize = 0;
-	space = NULL;
-	for (c = buf; *text && txsize < sizeof(buf) - 1; text++)
-	{
-		if (lnsize >= lnmax)
-		{
-			if (space)
-			{
-				lnsize = (c - space) - 1;
-				*space = '\n';
-				space = NULL;
-			}
-			else
-			{
-				lnsize = 0;
-				*c = '\n';
-				c++;
-				txsize++;
-				if (txsize >= sizeof(buf) - 1)
-					break;
-			}
-			lines++;
-		}
-
-		*c = *text;
-		switch (*c)
-		{
-		case '\n':
-			lines++;
-			lnsize = 0;
-			space = NULL;
-			break;
-		case ' ':
-			space = c;
-			break;
-		}
-		c++;
-		txsize++;
-		lnsize++;
-	}
-	// remove stray newlines at end and terminate string
-	while (txsize > 0 && buf[txsize - 1] == '\n')
-	{
-		lines--;
-		txsize--;
-	}
-	buf[txsize] = '\0';
-
 	// allocate new tooltip structure, copy text to structure
-	mtt = (menutooltip_t *)Z_Malloc(sizeof(menutooltip_t) + sizeof(char *)*lines + txsize + 1);
-	mtt->lines = (char **)(mtt + 1);
-	mtt->rows = lines;
-	Q_memcpy(mtt->lines + lines, buf, txsize + 1);
-	mtt->lines[0] = (char *)(mtt->lines + lines);
-
-	// rescan text, get max column length, convert \n to \0
-	lines = lnmax = txsize = 0;
-	for (c = mtt->lines[0]; *c; c++)
-	{
-		if (*c == '\n')
-		{
-			if (lnmax < txsize)
-				lnmax = txsize;
-			txsize = 0;
-			*c = '\0';
-			mtt->lines[++lines] = c + 1;
-		}
-		else
-			txsize++;
-	}
-	if (lnmax < txsize)
-		lnmax = txsize;
-	mtt->columns = lnmax;
+	mtt = (menutooltip_t *)Z_Malloc(sizeof(menutooltip_t) + sizeof(conchar_t)*MAX_CHARS);
+	mtt->end = COM_ParseFunString(CON_WHITEMASK, text, mtt->text, sizeof(conchar_t)*MAX_CHARS, false);
 
 	menu->tooltip = mtt;
 }
@@ -456,7 +376,7 @@ static void M_CheckMouseMove(void)
 
 									menu->selecteditem = option;
 									menu->tooltiptime = realtime + 1;
-									MenuTooltipSplit(menu, menu->selecteditem->common.tooltip);
+									MenuTooltipChange(menu, menu->selecteditem->common.tooltip);
 								}
 								if (menu->cursoritem)
 									menu->cursoritem->common.posy = menu->selecteditem->common.posy;
@@ -711,11 +631,28 @@ static void MenuDraw(menu_t *menu)
 		if (omousex > menu->xpos+option->common.posx && omousex < menu->xpos+option->common.posx+option->common.width)
 			if (omousey > menu->ypos+option->common.posy && omousey < menu->ypos+option->common.posy+option->common.height)
 			{
-				int x = omousex;
+				int x = omousex+8;
 				int y = omousey;
-				int w = (menu->tooltip->columns + 3) * 8;
-				int h = (menu->tooltip->rows + 2) * 8;
+				int w;
+				int h;
 				int l, lines;
+				conchar_t *line_start[16];
+				conchar_t *line_end[countof(line_start)];
+
+				//figure out the line breaks
+				Font_BeginString(font_default, 0, 0, &l, &l);
+				lines = Font_LineBreaks(menu->tooltip->text, menu->tooltip->end, min(vid.pixelwidth/2, 30*8*vid.pixelwidth/vid.width), countof(line_start), line_start, line_end);
+				Font_EndString(font_default);
+
+				//figure out how wide that makes the tip
+				w = 16;
+				h = (lines+2)*8;
+				for (l = 0; l < lines; l++)
+				{
+					int lw = 16+Font_LineWidth(line_start[l], line_end[l])*vid.width/vid.pixelwidth;
+					if (w < lw)
+						w = lw;
+				}
 
 				// keep the tooltip within view
 				if (x + w >= vid.width)
@@ -723,16 +660,19 @@ static void MenuDraw(menu_t *menu)
 				if (y + h >= vid.height)
 					y -= h;
 
-				// draw tooltip
-				Draw_TextBox(x, y, menu->tooltip->columns, menu->tooltip->rows);
-				lines = menu->tooltip->rows;
+				// draw the background
+				Draw_TextBox(x, y, (w-16)/8, lines);
 				x += 8;
 				y += 8;
+
+				//draw the text
+				Font_BeginString(font_default, x, y, &x, &y);
 				for (l = 0; l < lines; l++)
 				{
-					Draw_FunString(x, y, menu->tooltip->lines[l]);
-					y += 8;
+					Font_LineDraw(x, y, line_start[l], line_end[l]);
+					y += Font_CharHeight();
 				}
+				Font_EndString(font_default);
 			}
 	}
 
@@ -2165,34 +2105,28 @@ void M_Menu_Main_f (void)
 		y = 32;
 		mainm->selecteditem = (menuoption_t *)
 #ifndef CLIENTONLY
-		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Single       ", "menu_single\n");	y += 20;
+		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Single        ", "menu_single\n");		y += 20;
 #endif
-		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Multiplayer  ", "menu_multi\n");	y += 20;
-		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Options      ", "menu_options\n");	y += 20;
+		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Multiplayer   ", "menu_multi\n");		y += 20;
+		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Options       ", "menu_options\n");	y += 20;
 		if (m_helpismedia.value)
-		{
-			MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Media        ", "menu_media\n");	y += 20;
-		}
+			{MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Media         ", "menu_media\n");		y += 20;}
 		else
-		{
-			MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Help         ", "help\n");			y += 20;
-		}
+			{MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Help          ", "help\n");			y += 20;}
 		if (Cmd_AliasExist("mod_menu", RESTRICT_LOCAL))
-		{
-			MC_AddConsoleCommandQBigFont(mainm, 72, y,	va("%-13s", Cvar_Get("mod_menu", "Mod Menu", 0, NULL)->string), "mod_menu\n");			y += 20;
-		}
+			{MC_AddConsoleCommandQBigFont(mainm, 72, y,	va("%-14s", Cvar_Get("mod_menu", "Mod Menu", 0, NULL)->string), "mod_menu\n");			y += 20;}
 		if (Cmd_Exists("xmpp"))
-		{
-			MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Social       ", "xmpp\n");			y += 20;
-		}
+			{MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Social        ", "xmpp\n");			y += 20;}
 		if (Cmd_Exists("irc"))
-		{
-			MC_AddConsoleCommandQBigFont(mainm, 72, y,	"IRC          ", "irc\n");			y += 20;
-		}
+			{MC_AddConsoleCommandQBigFont(mainm, 72, y,	"IRC           ", "irc\n");				y += 20;}
+		if (Cmd_Exists("qi"))
+			{MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Quake Injector", "qi\n");				y += 20;}
+		if (Cmd_Exists("menu_download"))
+			{MC_AddConsoleCommandQBigFont(mainm, 72, y,	"Updates       ", "menu_download\n");	y += 20;}
 #ifdef FTE_TARGET_WEB
-		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Save Settings", "menu_quit\n");	y += 20;
+		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Save Settings ", "menu_quit\n");		y += 20;
 #else
-		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Quit         ", "menu_quit\n");	y += 20;
+		MC_AddConsoleCommandQBigFont	(mainm, 72, y,	"Quit          ", "menu_quit\n");		y += 20;
 #endif
 
 		mainm->cursoritem = (menuoption_t *)MC_AddCursor(mainm, &resel, 54, 32);

@@ -102,11 +102,11 @@ static dllfunction_t sqlitefuncs[] =
 dllhandle_t *sqlitehandle;
 #endif
 
-cvar_t sql_driver = SCVARF("sv_sql_driver", "", CVAR_NOUNSAFEEXPAND);
-cvar_t sql_host = SCVARF("sv_sql_host", "127.0.0.1", CVAR_NOUNSAFEEXPAND);
-cvar_t sql_username = SCVARF("sv_sql_username", "", CVAR_NOUNSAFEEXPAND);
-cvar_t sql_password = SCVARF("sv_sql_password", "", CVAR_NOUNSAFEEXPAND);
-cvar_t sql_defaultdb = SCVARF("sv_sql_defaultdb", "", CVAR_NOUNSAFEEXPAND);
+cvar_t sql_driver = CVARF("sv_sql_driver", "", CVAR_NOUNSAFEEXPAND);
+cvar_t sql_host = CVARF("sv_sql_host", "127.0.0.1", CVAR_NOUNSAFEEXPAND);
+cvar_t sql_username = CVARF("sv_sql_username", "", CVAR_NOUNSAFEEXPAND);
+cvar_t sql_password = CVARF("sv_sql_password", "", CVAR_NOUNSAFEEXPAND);
+cvar_t sql_defaultdb = CVARF("sv_sql_defaultdb", "", CVAR_NOUNSAFEEXPAND);
 
 void SQL_PushResult(sqlserver_t *server, queryresult_t *qres)
 {
@@ -169,6 +169,7 @@ queryrequest_t *SQL_PullRequest(sqlserver_t *server, qboolean lock)
 sqlserver_t **sqlservers;
 int sqlservercount;
 int sqlavailable;
+int sqlinited;
 
 #ifdef USE_SQLITE
 //this is to try to sandbox sqlite so it can only edit the file its originally opened with.
@@ -821,6 +822,9 @@ int SQL_NewServer(const char *driver, const char **paramstr)
 	else // invalid driver choice so we bomb out
 		return -1;
 
+	if (!SQL_Available())	//also makes sure the drivers are actually loaded.
+		return -1;
+
 	if (!(sqlavailable & (1u<<drvchoice)))
 		return -1;
 
@@ -1020,6 +1024,29 @@ const char *SQL_Info(sqlserver_t *server)
 
 qboolean SQL_Available(void)
 {
+	if (!sqlinited)
+	{
+		sqlinited = true;
+#ifdef USE_MYSQL
+		//mysql pokes network etc. there's no sandbox. people can use quake clients to pry upon private databases.
+		if (COM_CheckParm("-mysql"))
+			if (SQL_MYSQLInit())
+				sqlavailable |= 1u<<SQLDRV_MYSQL;
+#endif
+#ifdef USE_SQLITE
+		//our sqlite implementation is sandboxed. we block database attachments, and restrict the master database name.
+#ifdef _WIN32
+		sqlitehandle = Sys_LoadLibrary("sqlite3", sqlitefuncs);
+#else	
+		sqlitehandle = Sys_LoadLibrary("libsqlite3.so.0", sqlitefuncs);	//at least on debian.
+#endif
+		if (sqlitehandle)
+		{
+			sqlavailable |= 1u<<SQLDRV_SQLITE;
+		}
+#endif
+	}
+
 	return !!sqlavailable;
 }
 
@@ -1029,10 +1056,22 @@ void SQL_Status_f(void)
 	int i;
 	char *stat;
 
-	if (!SQL_Available())
-		Con_Printf("No SQL library available.\n");
+	SQL_Available();	//also ensures any drivers are loaded.
+#ifdef USE_MYSQL
+	if (!COM_CheckParm("-mysql"))
+		Con_Printf("mysql: %s\n", "requires -mysql cmdline argument");
 	else
-		Con_Printf("%i connections\n", sqlservercount);
+		Con_Printf("mysql: %s\n", (sqlavailable&(1u<<SQLDRV_MYSQL))?"loaded":"unavailable");
+#else
+	Con_Printf("mysql: %s\n", "disabled at compile time");
+#endif
+#ifdef USE_SQLITE
+	Con_Printf("sqlite: %s\n", (sqlavailable&(1u<<SQLDRV_SQLITE))?"loaded":"unavailable");
+#else
+	Con_Printf("sqlite: %s\n", "disabled at compile time");
+#endif
+	
+	Con_Printf("%i connections\n", sqlservercount);
 	for (i = 0; i < sqlservercount; i++)
 	{
 		int reqnum = 0;
@@ -1243,20 +1282,6 @@ qboolean SQL_MYSQLInit(void)
 void SQL_Init(void)
 {
 	sqlavailable = 0;
-#ifdef USE_MYSQL
-	//mysql pokes network etc. there's no sandbox. people can use quake clients to pry upon private databases.
-	if (COM_CheckParm("-mysql"))
-		if (SQL_MYSQLInit())
-			sqlavailable |= 1u<<SQLDRV_MYSQL;
-#endif
-#ifdef USE_SQLITE
-	//our sqlite implementation is sandboxed. we block database attachments, and restrict the master database name.
-	sqlitehandle = Sys_LoadLibrary("sqlite3", sqlitefuncs);
-	if (sqlitehandle)
-	{
-		sqlavailable |= 1u<<SQLDRV_SQLITE;
-	}
-#endif
 
 	Cmd_AddCommand ("sqlstatus", SQL_Status_f);
 	Cmd_AddCommand ("sqlkill", SQL_Kill_f);
@@ -1291,6 +1316,7 @@ void SQL_DeInit(void)
 	sqlavailable = 0;
 
 	SQL_KillServers();
+	sqlinited = false;
 
 #ifdef USE_MYSQL
 	if (qmysql_library_end)

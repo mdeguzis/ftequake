@@ -1667,11 +1667,8 @@ static qboolean Sh_ScissorForSphere(vec3_t center, float radius, vrect_t *rect)
 	/*return false to say that its fully offscreen*/
 
 	float v[4], tempv[4];
-	extern cvar_t temp1;
 	int i;
 	vrect_t r;
-	
-	radius *= temp1.value;
 
 	rect->x = 0;
 	rect->y = 0;
@@ -1733,7 +1730,6 @@ static qboolean Sh_ScissorForBox(vec3_t mins, vec3_t maxs, srect_t *r)
 	float frac;
 	float x,x1,x2,y,y1,y2;
 	double z, z1, z2;
-	extern cvar_t gl_mindist;
 
 	r->x = 0;
 	r->y = 0;
@@ -1755,7 +1751,7 @@ static qboolean Sh_ScissorForBox(vec3_t mins, vec3_t maxs, srect_t *r)
 //		return false;
 //	}
 
-	ncpdist = DotProduct(r_refdef.vieworg, vpn) + gl_mindist.value;
+	ncpdist = DotProduct(r_refdef.vieworg, vpn) + r_refdef.mindist;
 
 	for (i = 0; i < 8; i++)
 	{
@@ -2892,7 +2888,7 @@ static void Sh_DrawStencilLightShadows(dlight_t *dl, qbyte *lvis, qbyte *vvis, q
 
 		if (cls.allow_anyparticles)	//allowed or static
 		{
-			if (emodel->engineflags & MDLF_ENGULPHS)
+			if (emodel->engineflags & MDLF_EMITREPLACE)
 			{
 				if (gl_part_flame.value)
 					continue;
@@ -3027,7 +3023,7 @@ static qboolean Sh_DrawStencilLight(dlight_t *dl, vec3_t colour, vec3_t axis[3],
 			}
 		#endif
 			//our stencil writes.
-			if (gl_config.arb_depth_clamp && gl_maxdist.value != 0)
+			if (gl_config.arb_depth_clamp && r_refdef.maxdist != 0)
 				qglEnable(GL_DEPTH_CLAMP_ARB);
 
 		#if 0 //def _DEBUG

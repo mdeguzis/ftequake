@@ -224,19 +224,19 @@ float           scr_disabled_time;
 float oldsbar = 0;
 
 cvar_t	con_stayhidden = CVARFD("con_stayhidden", "0", CVAR_NOTFROMSERVER, "0: allow console to pounce on the user\n1: console stays hidden unless explicitly invoked\n2:toggleconsole command no longer works\n3: shift+escape key no longer works");
-cvar_t	show_fps	= SCVARF("show_fps", "0", CVAR_ARCHIVE);
-cvar_t	show_fps_x	= SCVAR("show_fps_x", "-1");
-cvar_t	show_fps_y	= SCVAR("show_fps_y", "-1");
-cvar_t	show_clock	= SCVAR("cl_clock", "0");
-cvar_t	show_clock_x	= SCVAR("cl_clock_x", "0");
-cvar_t	show_clock_y	= SCVAR("cl_clock_y", "-1");
-cvar_t	show_gameclock	= SCVAR("cl_gameclock", "0");
-cvar_t	show_gameclock_x	= SCVAR("cl_gameclock_x", "0");
-cvar_t	show_gameclock_y	= SCVAR("cl_gameclock_y", "-1");
-cvar_t	show_speed	= SCVAR("show_speed", "0");
-cvar_t	show_speed_x	= SCVAR("show_speed_x", "-1");
-cvar_t	show_speed_y	= SCVAR("show_speed_y", "-9");
-cvar_t	scr_loadingrefresh = SCVAR("scr_loadingrefresh", "0");
+cvar_t	show_fps	= CVARF("show_fps", "0", CVAR_ARCHIVE);
+cvar_t	show_fps_x	= CVAR("show_fps_x", "-1");
+cvar_t	show_fps_y	= CVAR("show_fps_y", "-1");
+cvar_t	show_clock	= CVAR("cl_clock", "0");
+cvar_t	show_clock_x	= CVAR("cl_clock_x", "0");
+cvar_t	show_clock_y	= CVAR("cl_clock_y", "-1");
+cvar_t	show_gameclock	= CVAR("cl_gameclock", "0");
+cvar_t	show_gameclock_x	= CVAR("cl_gameclock_x", "0");
+cvar_t	show_gameclock_y	= CVAR("cl_gameclock_y", "-1");
+cvar_t	show_speed	= CVAR("show_speed", "0");
+cvar_t	show_speed_x	= CVAR("show_speed_x", "-1");
+cvar_t	show_speed_y	= CVAR("show_speed_y", "-9");
+cvar_t	scr_loadingrefresh = CVAR("scr_loadingrefresh", "0");
 cvar_t	scr_showloading	= CVAR("scr_showloading", "1");
 cvar_t	scr_showobituaries = CVAR("scr_showobituaries", "0");
 
@@ -548,16 +548,16 @@ void VARGS Stats_Message(char *msg, ...)
 	p->time_start = cl.time;
 }
 
-#define MAX_CPRINT_LINES 128
+#define MAX_CPRINT_LINES 256
 void SCR_DrawCenterString (vrect_t *rect, cprint_t *p, struct font_s *font)
 {
-	int             l;
-	int             y, x;
+	int				l;
+	int				y, x;
 	int				left;
 	int				right;
 	int				top;
 	int				bottom;
-	int             remaining;
+	int				remaining;
 	shader_t		*pic;
 
 	conchar_t *line_start[MAX_CPRINT_LINES];
@@ -695,7 +695,9 @@ void SCR_DrawCenterString (vrect_t *rect, cprint_t *p, struct font_s *font)
 
 void SCR_CheckDrawCenterString (void)
 {
+#ifdef QUAKEHUD
 	extern qboolean sb_showscores;
+#endif
 	int pnum;
 	cprint_t *p;
 
@@ -1035,7 +1037,7 @@ char *SCR_ShowPics_ClickCommand(int cx, int cy)
 }
 
 //all=false clears only server pics, not ones from configs.
-void SCR_ShowPic_Clear(qboolean persistflag)
+void SCR_ShowPic_ClearAll(qboolean persistflag)
 {
 	showpic_t **link, *sp;
 	int pnum;
@@ -1048,7 +1050,7 @@ void SCR_ShowPic_Clear(qboolean persistflag)
 
 	for (link = &showpics; (sp=*link); )
 	{
-		if (sp->persist == persistflag)
+		if (sp->persist != persistflag)
 		{
 			link = &sp->next;
 			continue;
@@ -1252,7 +1254,7 @@ void SCR_ShowPic_Script_f(void)
 
 void SCR_ShowPic_Remove_f(void)
 {
-	SCR_ShowPic_Clear(!Cmd_FromGamecode());
+	SCR_ShowPic_ClearAll(!Cmd_FromGamecode());
 }
 
 //=============================================================================
@@ -1552,7 +1554,10 @@ void SCR_DrawClock(void)
 
 	time( &long_time );
 	newtime = localtime( &long_time );
-	strftime( str, sizeof(str)-1, "%H:%M    ", newtime);
+	if (show_clock.ival == 2)
+		strftime( str, sizeof(str)-1, "%I:%M %p   ", newtime);
+	else
+		strftime( str, sizeof(str)-1, "%H:%M    ", newtime);
 
 	SCR_StringXY(str, show_clock_x.value, show_clock_y.value);
 }
@@ -1608,6 +1613,11 @@ void SCR_DrawPause (void)
 
 	if (!cl.paused)
 		return;
+
+#ifndef CLIENTONLY
+	if (sv.active && sv.paused == PAUSE_AUTO)
+		return;
+#endif
 
 	if (Key_Dest_Has(kdm_emenu) || Key_Dest_Has(kdm_gmenu))
 		return;
@@ -2337,7 +2347,7 @@ static void SCR_ScreenShot_f (void)
 		}
 		BZ_Free(rgbbuffer);
 	}
-	Con_Printf ("Couldn't write %s\n", sysname);
+	Con_Printf (CON_ERROR "Couldn't write %s\n", sysname);
 }
 
 void *SCR_ScreenShot_Capture(int fbwidth, int fbheight, enum uploadfmt *fmt)
@@ -2347,7 +2357,7 @@ void *SCR_ScreenShot_Capture(int fbwidth, int fbheight, enum uploadfmt *fmt)
 	qboolean okay = false;
 
 	Q_strncpyz(r_refdef.rt_destcolour[0].texname, "megascreeny", sizeof(r_refdef.rt_destcolour[0].texname));
-	R2D_RT_Configure(r_refdef.rt_destcolour[0].texname, fbwidth, fbheight, 1);
+	R2D_RT_Configure(r_refdef.rt_destcolour[0].texname, fbwidth, fbheight, 1, RT_IMAGEFLAGS);
 	BE_RenderToTextureUpdate2d(true);
 
 	R2D_FillBlock(0, 0, vid.fbvwidth, vid.fbvheight);
@@ -2380,7 +2390,7 @@ void *SCR_ScreenShot_Capture(int fbwidth, int fbheight, enum uploadfmt *fmt)
 	else
 		buf = VID_GetRGBInfo(&width, &height, fmt);
 
-	R2D_RT_Configure(r_refdef.rt_destcolour[0].texname, 0, 0, 0);
+	R2D_RT_Configure(r_refdef.rt_destcolour[0].texname, 0, 0, 0, RT_IMAGEFLAGS);
 	Q_strncpyz(r_refdef.rt_destcolour[0].texname, "", sizeof(r_refdef.rt_destcolour[0].texname));
 	BE_RenderToTextureUpdate2d(true);
 
@@ -2667,8 +2677,9 @@ static void SCR_DrawCharToSnap (int num, qbyte *dest, int width)
 
 	if (!draw_chars)
 	{
-		draw_chars = W_SafeGetLumpName("conchars");
-		if (!draw_chars)
+		size_t lumpsize;
+		draw_chars = W_SafeGetLumpName("conchars", &lumpsize);
+		if (!draw_chars || lumpsize != 128*128)
 			return;
 	}
 
@@ -2681,7 +2692,7 @@ static void SCR_DrawCharToSnap (int num, qbyte *dest, int width)
 	while (drawline--)
 	{
 		for (x=0 ; x<8 ; x++)
-			if (source[x]!=255)
+			if (source[x] && source[x]!=255)
 				dest[x] = source[x];
 		source += 128;
 		dest -= width;
@@ -2998,8 +3009,7 @@ void SCR_DeInit (void)
 	for (i = 0; i < countof(scr_centerprint); i++)
 	{
 		Z_Free(scr_centerprint[i].string);
-		scr_centerprint[i].string = NULL;
-		scr_centerprint[i].stringbytes = 0;
+		memset(&scr_centerprint[i], 0, sizeof(scr_centerprint[i]));
 	}
 	if (scr_initialized)
 	{

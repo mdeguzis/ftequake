@@ -60,7 +60,8 @@ none of these issues will be fixed by a compositing window manager, because ther
 
 #ifdef VKQUAKE
 #include "vk/vkrenderer.h"
-static qboolean XVK_SetupSurface(void);
+static qboolean XVK_SetupSurface_XLib(void);
+static qboolean XVK_SetupSurface_XCB(void);
 #endif
 #ifdef GLQUAKE
 #include <GL/glx.h>
@@ -184,9 +185,10 @@ static struct
 	XIC			unicodecontext;
 	XIM			inputmethod;
 } x11;
+
 static qboolean x11_initlib(void)
 {
-	dllfunction_t x11_functable[] =
+	static dllfunction_t x11_functable[] =
 	{
 		{(void**)&x11.pXChangeProperty,		"XChangeProperty"},
 		{(void**)&x11.pXCloseDisplay,		"XCloseDisplay"},
@@ -281,6 +283,35 @@ static qboolean x11_initlib(void)
 	return !!x11.lib;
 }
 
+#ifdef VK_USE_PLATFORM_XCB_KHR
+static struct
+{
+	void *lib;
+	xcb_connection_t *(*pXGetXCBConnection)(Display *dpy);
+} x11xcb;
+static qboolean x11xcb_initlib(void)
+{
+	static dllfunction_t x11xcb_functable[] =
+	{
+		{(void**)&x11xcb.pXGetXCBConnection,		"XGetXCBConnection"},
+		{NULL, NULL}
+	};
+
+	if (!x11xcb.lib)
+	{
+		x11xcb.lib = Sys_LoadLibrary("libX11-xcb.so.1", x11xcb_functable);
+		if (!x11xcb.lib)
+			x11xcb.lib = Sys_LoadLibrary("libX11-xcb", x11xcb_functable);
+
+		if (!x11xcb.lib)
+			Con_Printf("Unable to load libX11-xcb\n");
+	}
+	
+	return !!x11xcb.lib;
+}
+#endif
+
+
 #define FULLSCREEN_VMODE	1	//using xf86 vidmode (we can actually change modes)
 #define FULLSCREEN_VMODEACTIVE	2	//xf86 vidmode currently forced
 #define FULLSCREEN_LEGACY	4	//override redirect used
@@ -327,12 +358,13 @@ static struct
 	XF86VidModeModeInfo **modes;
 	int num_modes;
 	int usemode;
-	unsigned short originalramps[3][256];
+	unsigned short originalramps[3][2048];
 	qboolean originalapplied;	//states that the origionalramps arrays are valid, and contain stuff that we should revert to on close
+	int originalrampsize;
 } vm;
 static qboolean VMODE_Init(void)
 {
-	dllfunction_t vm_functable[] =
+	static dllfunction_t vm_functable[] =
 	{
 		{(void**)&vm.pXF86VidModeQueryVersion, "XF86VidModeQueryVersion"},
 		{(void**)&vm.pXF86VidModeGetGammaRampSize, "XF86VidModeGetGammaRampSize"},
@@ -400,7 +432,7 @@ static struct
 } dgam;
 static qboolean DGAM_Init(void)
 {
-	dllfunction_t dgam_functable[] =
+	static dllfunction_t dgam_functable[] =
 	{
 		{(void**)&dgam.pXF86DGADirectVideo, "XF86DGADirectVideo"},
 		{NULL, NULL}
@@ -466,7 +498,7 @@ static struct
 } xi2;
 static qboolean XI2_Init(void)
 {
-	dllfunction_t xi2_functable[] =
+	static dllfunction_t xi2_functable[] =
 	{
 		{(void**)&xi2.pXIQueryVersion, "XIQueryVersion"},
 		{(void**)&xi2.pXISelectEvents, "XISelectEvents"},
@@ -1017,6 +1049,9 @@ static void GetEvent(void)
 		x11.pXFreeEventData(vid_dpy, &event.xcookie);
 		break;
 	case ResizeRequest:
+#ifdef VKQUAKE
+		vk.neednewswapchain = true;
+#endif
 		vid.pixelwidth = event.xresizerequest.width;
 		vid.pixelheight = event.xresizerequest.height;
 		Cvar_ForceCallback(&vid_conautoscale);
@@ -1026,6 +1061,9 @@ static void GetEvent(void)
 	case ConfigureNotify:
 		if (event.xconfigurerequest.window == vid_window)
 		{
+#ifdef VKQUAKE
+			vk.neednewswapchain = true;
+#endif
 			vid.pixelwidth = event.xconfigurerequest.width;
 			vid.pixelheight = event.xconfigurerequest.height;
 			Cvar_ForceCallback(&vid_conautoscale);
@@ -1179,7 +1217,7 @@ static void GetEvent(void)
 		}
 
 		if (vm.originalapplied)
-			vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, 256, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
+			vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, vm.originalrampsize, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
 
 		mw = vid_window;
 		if ((fullscreenflags & FULLSCREEN_LEGACY) && (fullscreenflags & FULLSCREEN_ACTIVE))
@@ -1267,7 +1305,7 @@ void GLVID_Shutdown(void)
 		uninstall_grabs();
 
 	if (vm.originalapplied)
-		vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, 256, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
+		vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, vm.originalrampsize, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
 
 	X_ShutdownUnicode();
 
@@ -1344,7 +1382,7 @@ static Cursor CreateNullCursor(Display *display, Window root)
 	return cursor;
 }
 
-qboolean GLVID_ApplyGammaRamps(unsigned short *ramps)
+qboolean GLVID_ApplyGammaRamps(unsigned int rampcount, unsigned short *ramps)
 {
 	extern qboolean gammaworks;
 	//extern cvar_t vid_hardwaregamma;
@@ -1353,7 +1391,7 @@ qboolean GLVID_ApplyGammaRamps(unsigned short *ramps)
 	if (!vm.originalapplied)
 		return false;
 
-	if (ramps)
+	if (ramps || rampcount != vm.originalrampsize)
 	{
 		//hardwaregamma==1 skips hardware gamma when we're not fullscreen, in favour of software glsl based gamma.
 //		if (vid_hardwaregamma.value == 1 && !vid.activeapp && !(fullscreenflags & FULLSCREEN_ACTIVE))
@@ -1365,15 +1403,15 @@ qboolean GLVID_ApplyGammaRamps(unsigned short *ramps)
 	
 		//we have hardware gamma applied - if we're doing a BF, we don't want to reset to the default gamma if it randomly fails (yuck)
 		if (gammaworks)
-			vm.pXF86VidModeSetGammaRamp (vid_dpy, scrnum, 256, &ramps[0], &ramps[256], &ramps[512]);
+			vm.pXF86VidModeSetGammaRamp (vid_dpy, scrnum, rampcount, &ramps[0], &ramps[rampcount], &ramps[rampcount*2]);
 		else
-			gammaworks = !!vm.pXF86VidModeSetGammaRamp (vid_dpy, scrnum, 256, &ramps[0], &ramps[256], &ramps[512]);
+			gammaworks = !!vm.pXF86VidModeSetGammaRamp (vid_dpy, scrnum, rampcount, &ramps[0], &ramps[rampcount], &ramps[rampcount*2]);
 
 		return gammaworks;
 	}
 	else
 	{
-		vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, 256, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
+		vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, vm.originalrampsize, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
 		return true;
 	}
 }
@@ -1845,13 +1883,16 @@ qboolean X11VID_Init (rendererstate_t *info, unsigned char *palette, int psl)
 	{
 		int rampsize = 256;
 		vm.pXF86VidModeGetGammaRampSize(vid_dpy, scrnum, &rampsize);
-		if (rampsize != 256)
+		if (rampsize > countof(vm.originalramps[0]))
 		{
 			vm.originalapplied = false;
 			Con_Printf("Gamma ramps are not of 256 components (but %i).\n", rampsize);
 		}
 		else
-			vm.originalapplied = vm.pXF86VidModeGetGammaRamp(vid_dpy, scrnum, 256, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
+		{
+			vm.originalrampsize = vid.gammarampsize = rampsize;
+			vm.originalapplied = vm.pXF86VidModeGetGammaRamp(vid_dpy, scrnum, vm.originalrampsize, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
+		}
 	}
 	else
 		vm.originalapplied = false;
@@ -1891,12 +1932,17 @@ qboolean X11VID_Init (rendererstate_t *info, unsigned char *palette, int psl)
 #endif
 #ifdef VKQUAKE
 	case PSL_VULKAN:
-		if (!VK_Init(info, VK_KHR_XLIB_SURFACE_EXTENSION_NAME, XVK_SetupSurface))
-		{
-			Con_Printf("Failed to create vulkan context.\n");
-			GLVID_Shutdown();
-		}
-		break;
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+		if (VK_Init(info, VK_KHR_XLIB_SURFACE_EXTENSION_NAME, XVK_SetupSurface_XLib, NULL))
+			break;
+#endif
+#ifdef VK_USE_PLATFORM_XCB_KHR
+		if (x11xcb_initlib() && VK_Init(info, VK_KHR_XCB_SURFACE_EXTENSION_NAME, XVK_SetupSurface_XCB, NULL))
+			break;
+#endif
+		Con_Printf("Failed to create a vulkan context.\n");
+		GLVID_Shutdown();
+		return false;
 #endif
 	case PSL_NONE:
 		break;
@@ -2033,7 +2079,7 @@ void Sys_SendKeyEvents(void)
 					if (fullscreenflags & FULLSCREEN_VMODE)
 					{
 	 					if (vm.originalapplied)
-							vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, 256, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
+							vm.pXF86VidModeSetGammaRamp(vid_dpy, scrnum, vm.originalrampsize, vm.originalramps[0], vm.originalramps[1], vm.originalramps[2]);
 						if (fullscreenflags & FULLSCREEN_VMODEACTIVE)
 						{
 							vm.pXF86VidModeSwitchToMode(vid_dpy, scrnum, vm.modes[0]);
@@ -2180,7 +2226,8 @@ rendererinfo_t eglrendererinfo =
 #endif
 
 #ifdef VKQUAKE
-static qboolean XVK_SetupSurface(void)
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+static qboolean XVK_SetupSurface_XLib(void)
 {
 	VkXlibSurfaceCreateInfoKHR inf = {VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR};
 	inf.flags = 0;
@@ -2191,6 +2238,20 @@ static qboolean XVK_SetupSurface(void)
 		return true;
 	return false;
 }
+#endif
+#ifdef VK_USE_PLATFORM_XCB_KHR
+static qboolean XVK_SetupSurface_XCB(void)
+{
+	VkXcbSurfaceCreateInfoKHR inf = {VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR};
+	inf.flags = 0;
+	inf.connection = x11xcb.pXGetXCBConnection(vid_dpy);
+	inf.window = vid_window;
+
+	if (VK_SUCCESS == vkCreateXcbSurfaceKHR(vk.instance, &inf, vkallocationcb, &vk.surface))
+		return true;
+	return false;
+}
+#endif
 rendererinfo_t vkrendererinfo =
 {
 	"Vulkan(X11)",
@@ -2313,3 +2374,4 @@ qboolean X11_GetDesktopParameters(int *width, int *height, int *bpp, int *refres
 
 	return true;
 }
+

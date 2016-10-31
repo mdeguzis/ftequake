@@ -1751,9 +1751,9 @@ void pf_hash_purge(void)	//restart command was used. revert to the state at the 
 typedef struct {
 	char name[256];
 	char *data;
-	int bufferlen;
-	int len;
-	int ofs;
+	size_t bufferlen;
+	size_t len;
+	size_t ofs;
 	int accessmode;
 	pubprogfuncs_t *prinst;
 } pf_fopen_files_t;
@@ -2010,6 +2010,13 @@ void QCBUILTIN PF_fgets (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals
 		max = o + sizeof(pr_string_temp)-1;
 		s = pf_fopen_files[fnum].data+pf_fopen_files[fnum].ofs;
 		eof = pf_fopen_files[fnum].data+pf_fopen_files[fnum].len;
+		
+		if (s >= eof)
+		{
+			G_INT(OFS_RETURN) = 0;	//EOF
+			return;
+		}
+
 		while(s < eof)
 		{
 			c = *s++;
@@ -2036,14 +2043,42 @@ void QCBUILTIN PF_fgets (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals
 
 		pf_fopen_files[fnum].ofs = s - pf_fopen_files[fnum].data;
 
-		if (!pr_string_temp[0] && s >= eof)
-			G_INT(OFS_RETURN) = 0;	//EOF
-		else
-			RETURN_TSTRING(pr_string_temp);
+		RETURN_TSTRING(pr_string_temp);
 	}
 }
 
-static int PF_fwrite_internal (pubprogfuncs_t *prinst, int fnum, char *msg, int len)
+//ensures that the buffer is at least big enough.
+static qboolean PF_fresizebuffer_internal (pf_fopen_files_t *f, size_t newlen)
+{
+	switch(f->accessmode)
+	{
+	default:
+		return false;
+	case FRIK_FILE_MMAP_RW:
+		//mmap cannot change the buffer size/allocation.
+		if (newlen > f->bufferlen)
+			return false;
+		break;
+	case FRIK_FILE_APPEND:
+	case FRIK_FILE_WRITE:
+		if (f->bufferlen < newlen)
+		{
+			char *newbuf;
+			size_t newbuflen = max(newlen, newlen*2+1024);
+			newbuf = BZF_Malloc(newbuflen);
+			if (!newbuf)
+				return false;
+			memcpy(newbuf, f->data, f->bufferlen);
+			memset(newbuf+f->bufferlen, 0, newbuflen - f->bufferlen);
+			BZ_Free(f->data);
+			f->data = newbuf;
+			f->bufferlen = newbuflen;
+		}
+		break;
+	}
+	return true;
+}
+static int PF_fwrite_internal (pubprogfuncs_t *prinst, int fnum, char *msg, size_t len)
 {
 	if (fnum < 0 || fnum >= MAX_QC_FILES)
 	{
@@ -2063,22 +2098,21 @@ static int PF_fwrite_internal (pubprogfuncs_t *prinst, int fnum, char *msg, int 
 		return 0;	//this just isn't ours.
 	}
 
+	if (pf_fopen_files[fnum].ofs + len < pf_fopen_files[fnum].ofs)
+	{
+		PF_Warningf(prinst, "PF_fwrite: size overflow\n");
+		return 0;
+	}
+
 	switch(pf_fopen_files[fnum].accessmode)
 	{
 	default:
 		return 0;
 	case FRIK_FILE_APPEND:
 	case FRIK_FILE_WRITE:
-		//UTF-8-FIXME: de-modify utf-8
-		if (pf_fopen_files[fnum].bufferlen < pf_fopen_files[fnum].ofs + len)
-		{
-			char *newbuf;
-			pf_fopen_files[fnum].bufferlen = pf_fopen_files[fnum].bufferlen*2 + len;
-			newbuf = BZF_Malloc(pf_fopen_files[fnum].bufferlen);
-			memcpy(newbuf, pf_fopen_files[fnum].data, pf_fopen_files[fnum].len);
-			BZ_Free(pf_fopen_files[fnum].data);
-			pf_fopen_files[fnum].data = newbuf;
-		}
+	case FRIK_FILE_MMAP_RW:
+		PF_fresizebuffer_internal(&pf_fopen_files[fnum], pf_fopen_files[fnum].ofs+len);
+		len = min(len, pf_fopen_files[fnum].bufferlen-pf_fopen_files[fnum].ofs);
 
 		memcpy(pf_fopen_files[fnum].data + pf_fopen_files[fnum].ofs, msg, len);
 		if (pf_fopen_files[fnum].len < pf_fopen_files[fnum].ofs + len)
@@ -2088,7 +2122,7 @@ static int PF_fwrite_internal (pubprogfuncs_t *prinst, int fnum, char *msg, int 
 	}
 }
 
-static int PF_fread_internal (pubprogfuncs_t *prinst, int fnum, char *msg, int len)
+static int PF_fread_internal (pubprogfuncs_t *prinst, int fnum, char *msg, size_t len)
 {
 	if (fnum < 0 || fnum >= MAX_QC_FILES)
 	{
@@ -2157,6 +2191,60 @@ void QCBUILTIN PF_fread (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals
 	}
 
 	G_INT(OFS_PARM1) = PF_fread_internal (prinst, fnum, prinst->stringtable + ptr, size);
+}
+void QCBUILTIN PF_fseek (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals)
+{
+	int fnum = G_FLOAT(OFS_PARM0) - FIRST_QC_FILE_INDEX;
+	G_INT(OFS_PARM1) = 0;
+	if (fnum < 0 || fnum >= MAX_QC_FILES)
+	{
+		PF_Warningf(prinst, "PF_fread: File out of range\n");
+		return;	//out of range
+	}
+	if (!pf_fopen_files[fnum].data)
+	{
+		PF_Warningf(prinst, "PF_fread: File is not open\n");
+		return;	//not open
+	}
+	if (pf_fopen_files[fnum].prinst != prinst)
+	{
+		PF_Warningf(prinst, "PF_fread: File is from wrong instance\n");
+		return;	//this just isn't ours.
+	}
+
+	G_INT(OFS_PARM1) = pf_fopen_files[fnum].ofs;
+	if (prinst->callargc>1 && G_INT(OFS_PARM0) >= 0)
+	{
+		pf_fopen_files[fnum].ofs = G_INT(OFS_PARM0);
+	}
+}
+void QCBUILTIN PF_fsize (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals)
+{
+	int fnum = G_FLOAT(OFS_PARM0) - FIRST_QC_FILE_INDEX;
+	G_INT(OFS_PARM1) = 0;
+	if (fnum < 0 || fnum >= MAX_QC_FILES)
+	{
+		PF_Warningf(prinst, "PF_fsize: File out of range\n");
+		return;	//out of range
+	}
+	if (!pf_fopen_files[fnum].data)
+	{
+		PF_Warningf(prinst, "PF_fsize: File is not open\n");
+		return;	//not open
+	}
+	if (pf_fopen_files[fnum].prinst != prinst)
+	{
+		PF_Warningf(prinst, "PF_fsize: File is from wrong instance\n");
+		return;	//this just isn't ours.
+	}
+
+	G_INT(OFS_PARM1) = pf_fopen_files[fnum].len;
+	if (prinst->callargc>1 && G_INT(OFS_PARM0) >= 0)
+	{
+		size_t newlen = G_INT(OFS_PARM0);
+		PF_fresizebuffer_internal(&pf_fopen_files[fnum], newlen);
+		pf_fopen_files[fnum].len = min(pf_fopen_files[fnum].bufferlen, newlen);
+	}
 }
 
 void PF_fcloseall (pubprogfuncs_t *prinst)
@@ -2303,6 +2391,13 @@ void search_close_progs(pubprogfuncs_t *prinst, qboolean complain)
 int QDECL search_enumerate(const char *name, qofs_t fsize, time_t mtime, void *parm, searchpathfuncs_t *spath)
 {
 	prvmsearch_t *s = parm;
+
+	size_t i;
+	for (i = 0; i < s->entries; i++)
+	{
+		if (!Q_strcasecmp(name, s->entry[i].name))
+			return true;	//already in the list, apparently. try to avoid dupes.
+	}
 
 	s->entry = BZ_Realloc(s->entry, ((s->entries+64)&~63) * sizeof(*s->entry));
 	s->entry[s->entries].name = BZ_Malloc(strlen(name)+1);
@@ -2567,7 +2662,9 @@ void QCBUILTIN PF_parseentitydata(pubprogfuncs_t *prinst, struct globalvars_s *p
 
 	size_t size;
 
-	if (offset)
+	if (offset < 0)
+		offset = 0;
+	else if (offset)
 	{
 		int boffset = offset;
 		if (VMUTF8)
@@ -2891,12 +2988,12 @@ void QCBUILTIN PF_strpad (pubprogfuncs_t *prinst, struct globalvars_s *pr_global
 	if (pad < 0)
 	{	//pad left
 		pad = -pad - strlen(src);
-		if (pad>=MAXTEMPBUFFERLEN)
-			pad = MAXTEMPBUFFERLEN-1;
+		if (pad>=sizeof(destbuf))
+			pad = sizeof(destbuf)-1;
 		if (pad < 0)
 			pad = 0;
 
-		Q_strncpyz(dest+pad, src, MAXTEMPBUFFERLEN-pad);
+		Q_strncpyz(dest+pad, src, sizeof(destbuf)-pad);
 		while(pad)
 		{
 			dest[--pad] = ' ';
@@ -2904,13 +3001,13 @@ void QCBUILTIN PF_strpad (pubprogfuncs_t *prinst, struct globalvars_s *pr_global
 	}
 	else
 	{	//pad right
-		if (pad>=MAXTEMPBUFFERLEN)
-			pad = MAXTEMPBUFFERLEN-1;
+		if (pad>=sizeof(destbuf))
+			pad = sizeof(destbuf)-1;
 		pad -= strlen(src);
 		if (pad < 0)
 			pad = 0;
 
-		Q_strncpyz(dest, src, MAXTEMPBUFFERLEN);
+		Q_strncpyz(dest, src, sizeof(destbuf));
 		dest+=strlen(dest);
 
 		while(pad-->0)
@@ -4028,7 +4125,11 @@ void QCBUILTIN PF_buf_writefile  (pubprogfuncs_t *prinst, struct globalvars_s *p
 	midx = min(midx, strbuflist[bufno].used);
 	for(strings = strbuflist[bufno].strings; idx < midx; idx++)
 	{
-		PF_fwrite_internal (prinst, fnum, strings[idx], strlen(strings[idx]));
+		if (strings[idx])
+		{
+			PF_fwrite_internal (prinst, fnum, strings[idx], strlen(strings[idx]));
+			PF_fwrite_internal (prinst, fnum, "\n", 1);
+		}
 	}
 	G_FLOAT(OFS_RETURN) = 1;
 }
@@ -4123,7 +4224,7 @@ void QCBUILTIN PF_uri_unescape  (pubprogfuncs_t *prinst, struct globalvars_s *pr
 	unsigned char *i, *o;
 	unsigned char hex;
 	i = s; o = resultbuf;
-	while (*i)
+	while (*i && o < resultbuf+sizeof(resultbuf)-2)
 	{
 		if (*i == '%')
 		{
@@ -4657,6 +4758,11 @@ void QCBUILTIN PF_vectorvectors (pubprogfuncs_t *prinst, struct globalvars_s *pr
 	VectorCopy(G_VECTOR(OFS_PARM0), world->g.v_forward);
 	VectorNormalize(world->g.v_forward);
 	VectorVectors(world->g.v_forward, world->g.v_right, world->g.v_up);
+}
+
+void QCBUILTIN PF_crossproduct (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals)
+{
+	CrossProduct(G_VECTOR(OFS_PARM0), G_VECTOR(OFS_PARM1), G_VECTOR(OFS_RETURN));
 }
 
 //Maths functions

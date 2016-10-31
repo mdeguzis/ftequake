@@ -45,11 +45,11 @@ qboolean	noclip_anglehack;		// remnant from old quake
 void Host_FinishLoading(void);
 
 
-cvar_t	rcon_password = SCVARF("rcon_password", "", CVAR_NOUNSAFEEXPAND);
+cvar_t	rcon_password = CVARF("rcon_password", "", CVAR_NOUNSAFEEXPAND);
 
-cvar_t	rcon_address = SCVARF("rcon_address", "", CVAR_NOUNSAFEEXPAND);
+cvar_t	rcon_address = CVARF("rcon_address", "", CVAR_NOUNSAFEEXPAND);
 
-cvar_t	cl_timeout = SCVAR("cl_timeout", "60");
+cvar_t	cl_timeout = CVAR("cl_timeout", "60");
 
 cvar_t	cl_shownet = CVARD("cl_shownet","0", "Debugging var. 0 shows nothing. 1 shows incoming packet sizes. 2 shows individual messages. 3 shows entities too.");	// can be 0, 1, or 2
 
@@ -57,7 +57,7 @@ cvar_t	cl_pure		= CVARD("cl_pure", "0", "0=standard quake rules.\n1=clients shou
 cvar_t	cl_sbar		= CVARFC("cl_sbar", "0", CVAR_ARCHIVE, CL_Sbar_Callback);
 cvar_t	cl_hudswap	= CVARF("cl_hudswap", "0", CVAR_ARCHIVE);
 cvar_t	cl_maxfps	= CVARF("cl_maxfps", "500", CVAR_ARCHIVE);
-cvar_t	cl_idlefps	= CVARFD("cl_idlefps", "0", CVAR_ARCHIVE, "This is the maximum framerate to attain while idle/paused.");
+cvar_t	cl_idlefps	= CVARFD("cl_idlefps", "0", CVAR_ARCHIVE, "This is the maximum framerate to attain while idle/paused/unfocused.");
 cvar_t	cl_yieldcpu = CVARFD("cl_yieldcpu", "0", CVAR_ARCHIVE, "Attempt to yield between frames. This can resolve issues with certain drivers and background software, but can mean less consistant frame times. Will reduce power consumption/heat generation so should be set on laptops or similar (over-hot/battery powered) devices.");
 cvar_t	cl_nopext	= CVARF("cl_nopext", "0", CVAR_ARCHIVE);
 cvar_t	cl_pext_mask = CVAR("cl_pext_mask", "0xffffffff");
@@ -271,11 +271,11 @@ int			host_framecount;
 qbyte		*host_basepal;
 qbyte		*h2playertranslations;
 
-cvar_t	host_speeds = SCVAR("host_speeds","0");		// set for running times
+cvar_t	host_speeds = CVAR("host_speeds","0");		// set for running times
 #ifdef CRAZYDEBUGGING
-cvar_t	developer = SCVAR("developer","1");
+cvar_t	developer = CVAR("developer","1");
 #else
-cvar_t	developer = SCVAR("developer","0");
+cvar_t	developer = CVAR("developer","0");
 #endif
 
 int			fps_count;
@@ -741,8 +741,12 @@ void CL_CheckForResend (void)
 #ifndef CLIENTONLY
 	if (!cls.state && (!connectinfo.trying || sv.state != ss_clustermode) && sv.state)
 	{
+#ifdef NQPROT
 		qboolean proquakeangles = false;
+#endif
+#ifdef NETPREPARSE
 		extern cvar_t dpcompat_nopreparse;
+#endif
 		memset(&connectinfo, 0, sizeof(connectinfo));
 		Q_strncpyz (cls.servername, "internalserver", sizeof(cls.servername));
 		Cvar_ForceSet(&cl_servername, cls.servername);
@@ -918,8 +922,9 @@ void CL_CheckForResend (void)
 			}
 			net_message.packing = SZ_RAWBYTES;
 			net_message.cursize = 0;
+			MSG_BeginReading(net_message.prim);
 
-			if (connectinfo.subprotocol == CPNQ_ID)
+			if (connectinfo.subprotocol == CPNQ_ID && !proquakeangles)
 			{
 				net_from = connectinfo.adr;
 				Cmd_TokenizeString (va("connect %i %i %i \"\\name\\unconnected\"", NQ_NETCHAN_VERSION, 0, SV_NewChallenge()), false, false);
@@ -1486,7 +1491,7 @@ void CL_ClearState (void)
 #ifdef HEXEN2
 	T_FreeInfoStrings();
 #endif
-	SCR_ShowPic_Clear(false);
+	SCR_ShowPic_ClearAll(false);
 
 	if (cl.playerview[0].playernum == -1)
 	{	//left over from q2 connect.
@@ -2070,6 +2075,12 @@ void CL_CheckServerInfo(void)
 		cl.maxpitch = *s ? Q_atof(s) : 80.0f;
 		s = (cls.z_ext & Z_EXT_PITCHLIMITS) ? Info_ValueForKey (cl.serverinfo, "minpitch") : "";
 		cl.minpitch = *s ? Q_atof(s) : -70.0f;
+
+		if (cls.protocol == CP_NETQUAKE)
+		{	//proquake likes spamming us with fixangles
+			//should be about 0.5/65536, but there's some precision issues with such small numbers around 80, so we need to bias it more than we ought
+			cl.maxpitch -= 1.0/2048;
+		}
 	}
 	else
 	{
@@ -2926,8 +2937,10 @@ void CL_ConnectionlessPacket (void)
 					switch(strtoul(p, &p, 0))
 					{
 					case PROTOCOL_VERSION_R1Q2:
+#ifdef AVAIL_ZLIB		//r1q2 will typically send us compressed data, which is a problem if we can't handle that (q2pro has a way to disable it).
 						if (connectinfo.subprotocol < PROTOCOL_VERSION_R1Q2)
 							connectinfo.subprotocol = PROTOCOL_VERSION_R1Q2;
+#endif
 						break;
 					case PROTOCOL_VERSION_Q2PRO:
 						if (connectinfo.subprotocol < PROTOCOL_VERSION_Q2PRO)
@@ -4257,7 +4270,7 @@ void Host_WriteConfiguration (void)
 	{
 		if (strchr(cfg_save_name.string, '.'))
 		{
-			Con_TPrintf ("Couldn't write config.cfg.\n");
+			Con_TPrintf (CON_ERROR "Couldn't write config.cfg.\n");
 			return;
 		}
 
@@ -4266,7 +4279,7 @@ void Host_WriteConfiguration (void)
 		f = FS_OpenVFS(savename, "wb", FS_GAMEONLY);
 		if (!f)
 		{
-			Con_TPrintf ("Couldn't write config.cfg.\n");
+			Con_TPrintf (CON_ERROR "Couldn't write config.cfg.\n");
 			return;
 		}
 
@@ -5185,7 +5198,11 @@ double Host_Frame (double time)
 			{
 				//nq can send 'frames' without any entities before we're on the server, leading to short periods where the local player's position is not known. this is bad. so be more cautious with nq. this might break csqc.
 				CL_TransitionEntities();
-				if (cl.currentpackentities->num_entities)
+				if (cl.currentpackentities->num_entities
+#ifdef CSQC_DAT
+					|| (cls.fteprotocolextensions & PEXT_CSQC)
+#endif
+					)
 					CL_MakeActive("Quake");
 			}
 			else
@@ -5496,7 +5513,7 @@ void CL_ExecInitialConfigs(char *resetcommand)
 	int def;
 
 	Cbuf_Execute ();	//make sure any pending console commands are done with. mostly, anyway...
-	SCR_ShowPic_Clear(true);
+	SCR_ShowPic_ClearAll(true);
 
 	Cbuf_AddText("unbindall\n", RESTRICT_LOCAL);
 	Cbuf_AddText("bind volup \"inc volume 0.1\"\n", RESTRICT_LOCAL);
@@ -5507,6 +5524,9 @@ void CL_ExecInitialConfigs(char *resetcommand)
 	Cbuf_AddText("cl_warncmd 0\n", RESTRICT_LOCAL);
 	Cbuf_AddText("cvar_purgedefaults\n", RESTRICT_LOCAL);	//reset cvar defaults to their engine-specified values. the tail end of 'exec default.cfg' will update non-cheat defaults to mod-specified values.
 	Cbuf_AddText("cvarreset *\n", RESTRICT_LOCAL);			//reset all cvars to their current (engine) defaults
+#ifndef CLIENTONLY
+	Cbuf_AddText(va("sv_gamedir \"%s\"\n", FS_GetGamedir(true)), RESTRICT_LOCAL);
+#endif
 	Cbuf_AddText(resetcommand, RESTRICT_LOCAL);
 	Cbuf_AddText("\n", RESTRICT_LOCAL);
 	COM_ParsePlusSets(true);
@@ -5630,6 +5650,8 @@ void Host_FinishLoading(void)
 	#endif
 
 		r_blockvidrestart = 2;
+
+		Menu_Download_Update();
 	}
 
 #ifdef ANDROID
@@ -5734,6 +5756,7 @@ void Host_Init (quakeparms_t *parms)
 
 	R_SetRenderer(NULL);//set the renderer stuff to unset...
 
+	Cvar_ParseWatches();
 	host_initialized = true;
 	forcesaveprompt = false;
 
@@ -5812,10 +5835,12 @@ void Host_Shutdown(void)
 
 	COM_DestroyWorkerThread();
 
+	P_ShutdownParticleSystem();
 	Cvar_Shutdown();
 	Validation_FlushFileList();
 
 	Cmd_Shutdown();
+	PM_Shutdown();
 	Key_Unbindall_f();
 
 #ifdef PLUGINS

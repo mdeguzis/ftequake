@@ -8,6 +8,12 @@
 
 qboolean SV_AllowDownload (const char *name)
 {
+	if (strstr(name, ".."))
+		return false;
+	if (strchr(name, ':'))
+		return false;
+	if (*name == '/' || *name == '\\')
+		return false;
 	return true;
 }
 char		com_token[sizeof(com_token)];
@@ -120,12 +126,18 @@ int main(int argc, char **argv)
 }
 
 #ifdef _WIN32
+#ifdef _MSC_VER
+#define ULL(x) x##ui64
+#else
+#define ULL(x) x##ull
+#endif
+
 static time_t Sys_FileTimeToTime(FILETIME ft)
 {
 	ULARGE_INTEGER ull;
 	ull.LowPart = ft.dwLowDateTime;
 	ull.HighPart = ft.dwHighDateTime;
-	return ull.QuadPart / 10000000ULL - 11644473600ULL;
+	return ull.QuadPart / ULL(10000000) - ULL(11644473600);
 }
 void COM_EnumerateFiles (const char *match, int (*func)(const char *, qofs_t, time_t mtime, void *, searchpathfuncs_t *f), void *parm)
 {
@@ -361,13 +373,13 @@ IWEBFILE *IWebFOpenRead(char *name)					//fread(name, "rb");
 #else
 
 #ifndef CLIENTONLY
-cvar_t ftpserver = SCVAR("sv_ftp", "0");
-cvar_t ftpserver_port = SCVAR("sv_ftp_port", "21");
-cvar_t httpserver = SCVAR("sv_http", "0");
-cvar_t httpserver_port = SCVAR("sv_http_port", "80");
-cvar_t sv_readlevel = SCVAR("sv_readlevel", "0");	//default to allow anyone
-cvar_t sv_writelevel = SCVAR("sv_writelevel", "35");	//allowed to write to uploads/uname
-cvar_t sv_fulllevel = SCVAR("sv_fulllevel", "51");	//allowed to write anywhere, replace any file...
+cvar_t ftpserver = CVAR("sv_ftp", "0");
+cvar_t ftpserver_port = CVAR("sv_ftp_port", "21");
+cvar_t httpserver = CVAR("sv_http", "0");
+cvar_t httpserver_port = CVAR("sv_http_port", "80");
+cvar_t sv_readlevel = CVAR("sv_readlevel", "0");	//default to allow anyone
+cvar_t sv_writelevel = CVAR("sv_writelevel", "35");	//allowed to write to uploads/uname
+cvar_t sv_fulllevel = CVAR("sv_fulllevel", "51");	//allowed to write anywhere, replace any file...
 #endif
 
 //this file contains functions called from each side.

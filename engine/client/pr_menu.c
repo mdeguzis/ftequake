@@ -1182,8 +1182,8 @@ int menuentsize;
 
 // cvars
 #define MENUPROGSGROUP "Menu progs control"
-cvar_t forceqmenu = SCVAR("forceqmenu", "0");
-cvar_t pr_menuqc_coreonerror = SCVAR("pr_menuqc_coreonerror", "1");
+cvar_t forceqmenu = CVAR("forceqmenu", "0");
+cvar_t pr_menuqc_coreonerror = CVAR("pr_menuqc_coreonerror", "1");
 
 
 //new generic functions.
@@ -2004,6 +2004,7 @@ static struct {
 	{"vlen",					PF_vlen,					9},
 	{"vectoyaw",				PF_vectoyaw,				10},
 	{"vectoangles",				PF_vectoangles,				11},
+	{"crossproduct",			PF_crossproduct,			0},
 	{"random",					PF_random,					12},
 	{"localcmd",				PF_localcmd,				13},
 	{"cvar",					PF_menu_cvar,				14},
@@ -2057,6 +2058,8 @@ static struct {
 	{"fputs",					PF_fputs,					51},
 	{"fread",					PF_fread,					0},
 	{"fwrite",					PF_fwrite,					0},
+	{"fseek",					PF_fseek,					0},
+	{"fsize",					PF_fsize,					0},
 	{"strlen",					PF_strlen,					52},
 	{"strcat",					PF_strcat,					53},
 	{"substring",				PF_substring,				54},

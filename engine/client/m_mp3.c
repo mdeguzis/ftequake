@@ -256,10 +256,10 @@ qboolean Media_EvaluateNextTrack(void);
 
 int lasttrackplayed;
 
-cvar_t media_shuffle = SCVAR("media_shuffle", "1");
-cvar_t media_repeat = SCVAR("media_repeat", "1");
+cvar_t media_shuffle = CVAR("media_shuffle", "1");
+cvar_t media_repeat = CVAR("media_repeat", "1");
 #ifdef WINAMP
-cvar_t media_hijackwinamp = SCVAR("media_hijackwinamp", "0");
+cvar_t media_hijackwinamp = CVAR("media_hijackwinamp", "0");
 #endif
 
 int selectedoption=-1;
@@ -3662,7 +3662,7 @@ static void Media_RecordFilm (char *recordingname, qboolean demo)
 	if (demo && capturewidth.ival && captureheight.ival && qrenderer == QR_OPENGL && gl_config.ext_framebuffer_objects)
 	{
 		capturingfbo = true;
-		capturetexture = R2D_RT_Configure("$democapture", capturewidth.ival, captureheight.ival, TF_BGRA32);
+		capturetexture = R2D_RT_Configure("$democapture", capturewidth.ival, captureheight.ival, TF_BGRA32, RT_IMAGEFLAGS);
 		captureoldfbo = GLBE_FBO_Update(&capturefbo, FBO_RB_DEPTH|(Sh_StencilShadowsActive()?FBO_RB_STENCIL:0), &capturetexture, 1, r_nulltex, capturewidth.ival, captureheight.ival, 0);
 		vid.fbpwidth = capturewidth.ival;
 		vid.fbpheight = captureheight.ival;

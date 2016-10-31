@@ -103,8 +103,6 @@ typedef struct cvar_s
 #define CVARD(ConsoleName,Value,Description)					CVARAFDC(ConsoleName, Value, NULL, 0, Description, NULL)
 #define CVAR(ConsoleName,Value)									CVARD(ConsoleName, Value, NULL)
 
-#define SCVAR(ConsoleName,Value) CVAR(ConsoleName,Value)
-#define SCVARF(ConsoleName,Value,Flags) CVARF(ConsoleName,Value,Flags)
 #define CVARDP4(Flags,ConsoleName,Value,Description) CVARFD(ConsoleName, Value, Flags,Description)
 
 typedef struct cvar_group_s
@@ -143,6 +141,8 @@ typedef struct cvar_group_s
 #define CVAR_NORESET		(1<<20) //cvar is not reset by various things.
 #define CVAR_TEAMPLAYTAINT	(1<<21)	//current value contains the evaluation of a teamplay macro.
 
+#define CVAR_WATCHED		(1<<22)	//report any attempts to change this cvar.
+
 #define CVAR_LASTFLAG CVAR_SHADERSYSTEM
 
 #define CVAR_LATCHMASK		(CVAR_LATCH|CVAR_RENDERERLATCH|CVAR_SERVEROVERRIDE|CVAR_CHEAT|CVAR_SEMICHEAT)	//you're only allowed one of these.
@@ -173,6 +173,9 @@ qboolean Cvar_ApplyLatchFlag(cvar_t *var, char *value, int flag);
 qboolean Cvar_UnsavedArchive(void);
 void Cvar_Saved(void);
 void Cvar_ConfigChanged(void);
+
+extern int cvar_watched;	//so that cmd.c knows that it should add messages when configs are execed
+void Cvar_ParseWatches(void);	//parse -watch args
 
 int Cvar_ApplyLatches(int latchflag);
 //sets vars to their latched values

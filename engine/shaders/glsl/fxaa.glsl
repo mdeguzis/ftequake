@@ -1,3 +1,5 @@
+!!samps 1
+#include "sys/defs.h"
 //
 //This shader implements super-sampled anti-aliasing.
 //
@@ -5,7 +7,6 @@
 varying vec2 texcoord;
 
 #ifdef VERTEX_SHADER
-attribute vec2 v_texcoord;
 void main()
 {
 	texcoord = v_texcoord.xy;
@@ -14,7 +15,6 @@ void main()
 }
 #endif
 #ifdef FRAGMENT_SHADER
-uniform sampler2D s_t0;
 uniform vec2 e_sourcesize;
 
 void main( void )

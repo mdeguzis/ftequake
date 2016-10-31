@@ -180,7 +180,7 @@ void D3D11_ApplyRenderTargets(qboolean usedepth)
 		if (*r_refdef.rt_depth.texname)
 			depth = R2D_RT_GetTexture(r_refdef.rt_depth.texname, &width, &height);
 		else
-			depth = R2D_RT_Configure("depth", width, height, TF_DEPTH24);
+			depth = R2D_RT_Configure("depth", width, height, TF_DEPTH24, RT_IMAGEFLAGS);
 	}
 	else
 		depth = NULL;
@@ -1058,6 +1058,7 @@ extern float		hw_blend[4];		// rgba 0.0 - 1.0
 
 static void D3D11_BuildRamps(int points, DXGI_RGB *out)
 {
+//FIXME: repack input rather than recalculating.
 	int i;
 	vec3_t cshift;
 	vec3_t c;
@@ -1076,7 +1077,7 @@ static void D3D11_BuildRamps(int points, DXGI_RGB *out)
 	}
 }
 
-static qboolean	D3D11_VID_ApplyGammaRamps(unsigned short *ramps)
+static qboolean	D3D11_VID_ApplyGammaRamps(unsigned int gammarampsize, unsigned short *ramps)
 {
 	HRESULT hr;
 	DXGI_GAMMA_CONTROL_CAPABILITIES caps;
@@ -1385,7 +1386,6 @@ static void	D3D11_R_DeInit					(void)
 
 static void D3D11_SetupViewPort(void)
 {
-	extern cvar_t gl_mindist;
 	int		x, x2, y2, y;
 
 	float fov_x, fov_y;
@@ -1424,7 +1424,10 @@ static void D3D11_SetupViewPort(void)
 
 	/*view matrix*/
 	Matrix4x4_CM_ModelViewMatrixFromAxis(r_refdef.m_view, vpn, vright, vup, r_refdef.vieworg);
-	Matrix4x4_CM_Projection_Inf(r_refdef.m_projection, fov_x, fov_y, bound(0.1, gl_mindist.value, 4));
+	if (r_refdef.maxdist)
+		Matrix4x4_CM_Projection_Far(r_refdef.m_projection, fov_x, fov_y, r_refdef.mindist, r_refdef.maxdist);
+	else
+		Matrix4x4_CM_Projection_Inf(r_refdef.m_projection, fov_x, fov_y, r_refdef.mindist);
 }
 
 static void	(D3D11_R_RenderView)				(void)

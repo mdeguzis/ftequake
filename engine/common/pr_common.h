@@ -45,9 +45,6 @@ struct wedict_s
 
 #define PF_drawline PF_Fixme
 
-#define PF_WritePicture PF_Fixme
-#define PF_ReadPicture PF_Fixme
-
 #define G_PROG G_FLOAT
 
 //the lh extension system asks for a name for the extension.
@@ -94,6 +91,7 @@ void QCBUILTIN PF_floor (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals
 void QCBUILTIN PF_ceil (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_anglemod (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_vectorvectors (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
+void QCBUILTIN PF_crossproduct (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_Tokenize  (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_tokenizebyseparator  (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_tokenize_console  (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
@@ -143,6 +141,8 @@ void QCBUILTIN PF_fputs (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals
 void QCBUILTIN PF_fgets (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_fwrite (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_fread (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
+void QCBUILTIN PF_fseek (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
+void QCBUILTIN PF_fsize (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_normalize (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_vlen (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
 void QCBUILTIN PF_vhlen (pubprogfuncs_t *prinst, struct globalvars_s *pr_globals);
@@ -526,7 +526,7 @@ pbool QDECL ED_CanFree (edict_t *ed);
 #define MOVETYPE_6DOF			30		// flightsim mode
 #define MOVETYPE_WALLWALK		31		// walks up walls and along ceilings
 #define MOVETYPE_PHYSICS		32
-#define MOVETYPE_FLY_WORLDONLY	33
+#define MOVETYPE_FLY_WORLDONLY	33		//fly that collides only with world, keeping spectators within the world but free to pass through doors. avoids pvs issues with q3map2.
 
 // edict->solid values
 #define	SOLID_NOT				0		// no interaction with other objects
@@ -636,6 +636,8 @@ typedef enum
 	VF_ENGINESBAR = 20,
 	VF_DRAWCROSSHAIR = 21,
 	VF_CARTESIAN_ANGLES = 22,
+	VF_MINDIST = 23,
+	VF_MAXDIST = 24,
 
 	//this is a DP-compatibility hack.
 	VF_CL_VIEWANGLES_V = 33,

@@ -81,9 +81,9 @@ typedef struct
 //to make things repeatable so that people can depend upon placement.
 unsigned int R_Clutter_Random(clutter_build_ctx_t *ctx)
 {	//ripped from wikipedia (originally called xorshift128)
-    unsigned int t = ctx->x ^ (ctx->x << 11);
-    ctx->x = ctx->y; ctx->y = ctx->z; ctx->z = ctx->w;
-    return ctx->w = ctx->w ^ (ctx->w >> 19) ^ t ^ (t >> 8);
+	unsigned int t = ctx->x ^ (ctx->x << 11);
+	ctx->x = ctx->y; ctx->y = ctx->z; ctx->z = ctx->w;
+	return ctx->w = ctx->w ^ (ctx->w >> 19) ^ t ^ (t >> 8);
 }
 float R_Clutter_FRandom(clutter_build_ctx_t *ctx)
 {
@@ -621,11 +621,18 @@ cvar_t r_part_density = CVARF("r_part_density", "1", CVAR_ARCHIVE);
 cvar_t r_part_classic_expgrav = CVARFD("r_part_classic_expgrav", "10", CVAR_ARCHIVE, "Scaler for how fast classic explosion particles should accelerate due to gravity. 1 for like vanilla, 10 for like zquake.");
 cvar_t r_part_classic_opaque = CVARFD("r_part_classic_opaque", "0", CVAR_ARCHIVE, "Disables transparency on classic particles, for the oldskool look.");
 
-cvar_t r_part_maxparticles = CVAR("r_part_maxparticles", "8192");
+cvar_t r_part_maxparticles = CVAR("r_part_maxparticles", "65536");
 cvar_t r_part_maxdecals = CVAR("r_part_maxdecals", "8192");
 
 
 particleengine_t *pe;
+
+static struct partalias_s
+{
+	struct partalias_s *next;
+	const char *from;
+	const char *to;
+} *partaliaslist;
 
 void P_ParticleEffect_f(void);
 static void P_ParticleEffectAlias_f(void);
@@ -673,12 +680,18 @@ void P_InitParticleSystem(void)
 	R_Clutter_Init();
 }
 
-static struct partalias_s
+void P_ShutdownParticleSystem(void)
 {
-	struct partalias_s *next;
-	const char *from;
-	const char *to;
-} *partaliaslist;
+	struct partalias_s *l;
+
+	while (partaliaslist)
+	{
+		l = partaliaslist;
+		partaliaslist = l->next;
+		Z_Free(l);
+	}
+}
+
 static void P_ParticleEffectAlias_f(void)
 {
 	struct partalias_s **link, *l;
@@ -938,12 +951,26 @@ float CL_TraceLine (vec3_t start, vec3_t end, vec3_t impact, vec3_t normal, int 
 }
 
 //handy utility...
-void P_EmitEffect (vec3_t pos, int type, trailstate_t **tsk)
+void P_EmitEffect (vec3_t pos, vec3_t orientation[3], unsigned int modeleflags, int type, trailstate_t **tsk)
 {
+	float count;
 	if (cl.paused)
 		return;
 
-	pe->RunParticleEffectState(pos, NULL, ((host_frametime>0.1)?0.1:host_frametime), type, tsk);
+	count = ((host_frametime>0.1)?0.1:host_frametime);
+	if (orientation)
+	{
+		if (modeleflags & MDLF_EMITFORWARDS)
+			pe->RunParticleEffectState(pos, orientation[0], count, type, tsk);
+		else
+		{
+			vec3_t down;
+			VectorNegate(orientation[2], down);
+			pe->RunParticleEffectState(pos, down, count, type, tsk);
+		}
+	}
+	else
+		pe->RunParticleEffectState(pos, NULL, count, type, tsk);
 }
 
 

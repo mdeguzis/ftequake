@@ -496,8 +496,10 @@ static edict_t *QDECL Q1QVMPF_EntAlloc(pubprogfuncs_t *pf, pbool object, size_t 
 	return (struct edict_s *)e;
 }
 
-static int QDECL Q1QVMPF_LoadEnts(pubprogfuncs_t *pf, const char *mapstring, float spawnflags)
+static int QDECL Q1QVMPF_LoadEnts(pubprogfuncs_t *pf, const char *mapstring, void *ctx, void (PDECL *callback) (pubprogfuncs_t *progfuncs, struct edict_s *ed, void *ctx, const char *entstart, const char *entend))
 {
+	//the qvm calls the spawn functions itself.
+	//no saved-games.
 	q1qvmentstring = mapstring;
 	VM_Call(q1qvm, GAME_LOADENTS, 0, 0, 0);
 	q1qvmentstring = NULL;
@@ -1436,11 +1438,11 @@ static qintptr_t QVM_NextClient (void *offset, quintptr_t mask, const qintptr_t 
 static qintptr_t QVM_SetPause (void *offset, quintptr_t mask, const qintptr_t *arg)
 {
 	int pause = VM_LONG(arg[0]);
-	if ((sv.paused&1) == (pause&1))
-		return sv.paused&1;	//nothing changed, ignore it.
+	if ((sv.paused&PAUSE_EXPLICIT) == (pause&PAUSE_EXPLICIT))
+		return !!(sv.paused&PAUSE_EXPLICIT);	//nothing changed, ignore it.
 	sv.paused = pause;
 	sv.pausedstart = Sys_DoubleTime();
-	return sv.paused&1;
+	return !!(sv.paused&PAUSE_EXPLICIT);
 }
 static qintptr_t QVM_NotYetImplemented (void *offset, quintptr_t mask, const qintptr_t *arg)
 {

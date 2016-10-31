@@ -1,7 +1,9 @@
 #include "progsint.h"
-//#include "qcc.h"
+#include "qcc.h"
 
-//#define AVAIL_ZLIB
+#ifndef NO_ZLIB
+#define AVAIL_ZLIB
+#endif
 
 #ifdef AVAIL_ZLIB
 #ifdef _WIN32
@@ -33,7 +35,7 @@ pbool QC_decodeMethodSupported(int method)
 	return false;
 }
 
-char *QC_decode(progfuncs_t *progfuncs, int complen, int len, int method, char *info, char *buffer)
+char *QC_decode(progfuncs_t *progfuncs, int complen, int len, int method, const char *info, char *buffer)
 {
 	int i;
 	if (method == 0)	//copy
@@ -47,11 +49,11 @@ char *QC_decode(progfuncs_t *progfuncs, int complen, int len, int method, char *
 		for (i = 0; i < len; i++)
 			buffer[i] = info[i] ^ 0xA5;		
 	}
-	else if (method == 2)	//compression (ZLIB)
-	{
 #ifdef AVAIL_ZLIB
+	else if (method == 2 || method == 8)	//compression (ZLIB)
+	{
 		z_stream strm = {
-			info,
+			(char*)info,
 			complen,
 			0,
 
@@ -71,12 +73,15 @@ char *QC_decode(progfuncs_t *progfuncs, int complen, int len, int method, char *
 			0
 		};
 
-		inflateInit(&strm);
+		if (method == 8)
+			inflateInit2(&strm, -MAX_WBITS);
+		else
+			inflateInit(&strm);
 		if (Z_STREAM_END != inflate(&strm, Z_FINISH))	//decompress it in one go.
 			Sys_Error("Failed block decompression\n");
 		inflateEnd(&strm);
-#endif
 	}
+#endif
 	//add your decryption/decompression routine here.
 	else
 		Sys_Error("Bad file encryption routine\n");
@@ -86,10 +91,18 @@ char *QC_decode(progfuncs_t *progfuncs, int complen, int len, int method, char *
 }
 
 #if !defined(MINIMAL) && !defined(OMIT_QCC)
-void SafeWrite(int hand, void *buf, long count);
+int QC_encodecrc(int len, char *in)
+{
+#ifdef AVAIL_ZLIB
+	return crc32(0, in, len);
+#else
+	return 0;
+#endif
+}
+void SafeWrite(int hand, const void *buf, long count);
 int SafeSeek(int hand, int ofs, int mode);
 //we are allowed to trash our input here.
-int QC_encode(progfuncs_t *progfuncs, int len, int method, char *in, int handle)
+int QC_encode(progfuncs_t *progfuncs, int len, int method, const char *in, int handle)
 {
 	int i;
 	if (method == 0) //copy, allows a lame pass-through.
@@ -97,20 +110,20 @@ int QC_encode(progfuncs_t *progfuncs, int len, int method, char *in, int handle)
 		SafeWrite(handle, in, len);
 		return len;
 	}
-	else if (method == 1)	//xor encryption, not secure. maybe useful for the string table.
+	/*else if (method == 1)	//xor encryption, not secure. maybe useful for the string table.
 	{
 		for (i = 0; i < len; i++)
 			in[i] = in[i] ^ 0xA5;
 		SafeWrite(handle, in, len);
 		return len;
-	}
-	else if (method == 2)	//compression (ZLIB)
+	}*/
+	else if (method == 2 || method == 8)	//compression (ZLIB)
 	{
 #ifdef AVAIL_ZLIB
 		char out[8192];
 
 		z_stream strm = {
-			in,
+			(char *)in,
 			len,
 			0,
 
@@ -131,7 +144,10 @@ int QC_encode(progfuncs_t *progfuncs, int len, int method, char *in, int handle)
 		};
 		i=0;
 
-		deflateInit(&strm, Z_BEST_COMPRESSION);
+		if (method == 8)
+			deflateInit2(&strm, 9, Z_DEFLATED, -MAX_WBITS, 9, Z_DEFAULT_STRATEGY);		//zip deflate compression
+		else
+			deflateInit(&strm, Z_BEST_COMPRESSION);	//zlib compression
 		while(deflate(&strm, Z_FINISH) == Z_OK)
 		{
 			SafeWrite(handle, out, sizeof(out) - strm.avail_out);	//compress in chunks of 8192. Saves having to allocate a huge-mega-big buffer
@@ -156,6 +172,75 @@ int QC_encode(progfuncs_t *progfuncs, int len, int method, char *in, int handle)
 }
 #endif
 
+static int QC_ReadRawInt(const unsigned char *blob)
+{
+	return (blob[0]<<0) | (blob[1]<<8) | (blob[2]<<16) | (blob[3]<<24);
+}
+static int QC_ReadRawShort(const unsigned char *blob)
+{
+	return (blob[0]<<0) | (blob[1]<<8);
+}
+pbool QC_EnumerateFilesFromBlob(const void *blob, size_t blobsize, void (*cb)(const char *name, const void *compdata, size_t compsize, int method, size_t plainsize))
+{
+	unsigned int cdentries;
+	unsigned int cdlen;
+	const unsigned char *eocd;
+	const unsigned char *cd;
+	int nl,el,cl;
+	if (blobsize < 22)
+		return false;
+	eocd = blob;
+	eocd += blobsize-22;
+	if (QC_ReadRawInt(eocd+0) != 0x06054b50)
+		return false;
+	if (QC_ReadRawShort(eocd+4) || QC_ReadRawShort(eocd+6) || QC_ReadRawShort(eocd+20) || QC_ReadRawShort(eocd+8) != QC_ReadRawShort(eocd+10))
+		return false;
+	cd = blob;
+	cd += QC_ReadRawInt(eocd+16);
+	cdlen = QC_ReadRawInt(eocd+12);
+	cdentries = QC_ReadRawInt(eocd+10);
+	if (cd+cdlen>=(const unsigned char*)blob+blobsize)
+		return false;
+
+
+	for(; cdentries --> 0; cd += 46 + nl+el+cl)
+	{
+		if (QC_ReadRawInt(cd+0) != 0x02014b50)
+			break;
+		nl = QC_ReadRawShort(cd+28);
+		el = QC_ReadRawShort(cd+30);
+		cl = QC_ReadRawShort(cd+32);
+
+		if (QC_ReadRawShort(cd+8) != 0)
+			continue;
+
+		{
+			const unsigned char *le = (const unsigned char*)blob + QC_ReadRawInt(cd+42);
+			unsigned int csize, usize, method;
+			char name[256];
+
+			if (QC_ReadRawInt(le+0) != 0x04034b50)
+				continue;
+			if (QC_ReadRawShort(le+6) != 0)	//general purpose flags
+				continue;
+			method = QC_ReadRawShort(le+8);
+			if (method != 0 && method != 8)
+				continue;
+			if (nl != QC_ReadRawShort(le+26))
+				continue;	//name is weird...
+			if (el != QC_ReadRawShort(le+28))
+				continue;	//name is weird...
+
+			csize = QC_ReadRawInt(le+18);
+			usize = QC_ReadRawInt(le+22);
+			QC_strlcpy(name, cd+46, (nl+1<sizeof(name))?nl+1:sizeof(name));
+
+			cb(name, le+30+QC_ReadRawShort(le+26)+QC_ReadRawShort(le+28), csize, method, usize);
+		}
+	}
+	return true;
+}
+
 char *PDECL filefromprogs(pubprogfuncs_t *ppf, progsnum_t prnum, char *fname, size_t *size, char *buffer)
 {
 	progfuncs_t *progfuncs = (progfuncs_t*)ppf;
@@ -170,7 +255,7 @@ char *PDECL filefromprogs(pubprogfuncs_t *ppf, progsnum_t prnum, char *fname, si
 	if (!pr_progstate[prnum].progs->secondaryversion != PROG_SECONDARYVERSION16 &&
 		!pr_progstate[prnum].progs->secondaryversion != PROG_SECONDARYVERSION32)
 		return NULL;
-	
+
 	num = *(int*)((char *)pr_progstate[prnum].progs + pr_progstate[prnum].progs->ofsfiles);
 	s = (includeddatafile_t *)((char *)pr_progstate[prnum].progs + pr_progstate[prnum].progs->ofsfiles+4);	
 	while(num>0)

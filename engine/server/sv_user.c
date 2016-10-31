@@ -36,15 +36,15 @@ usercmd_t	cmd;
 
 extern cvar_t dpcompat_nopreparse;
 #ifdef SERVERONLY
-cvar_t	cl_rollspeed = SCVAR("cl_rollspeed", "200");
-cvar_t	cl_rollangle = SCVAR("cl_rollangle", "2.0");
+cvar_t	cl_rollspeed = CVAR("cl_rollspeed", "200");
+cvar_t	cl_rollangle = CVAR("cl_rollangle", "2.0");
 #else
 extern cvar_t	cl_rollspeed;
 extern cvar_t	cl_rollangle;
 #endif
-cvar_t	sv_spectalk	= SCVAR("sv_spectalk", "1");
+cvar_t	sv_spectalk	= CVAR("sv_spectalk", "1");
 
-cvar_t	sv_mapcheck	= SCVAR("sv_mapcheck", "1");
+cvar_t	sv_mapcheck	= CVAR("sv_mapcheck", "1");
 
 cvar_t	sv_fullredirect = CVARD("sv_fullredirect", "", "This is the ip:port to redirect players to when the server is full");
 cvar_t	sv_antilag			= CVARFD("sv_antilag", "", CVAR_SERVERINFO, "Attempt to backdate impacts to compensate for lag. 0=completely off. 1=mod-controlled. 2=forced, which might break certain uses of traceline.");
@@ -60,9 +60,9 @@ cvar_t	sv_protocol_nq		= CVARD("sv_protocol_nq", "", "Specifies the default prot
 cvar_t	sv_minpitch		 = CVARAFD("minpitch", "",	"sv_minpitch", CVAR_SERVERINFO, "Assumed to be -70");
 cvar_t	sv_maxpitch		 = CVARAFD("maxpitch", "",	"sv_maxpitch", CVAR_SERVERINFO, "Assumed to be 80");
 
-cvar_t	sv_cmdlikercon	= SCVAR("sv_cmdlikercon", "0");	//set to 1 to allow a password of username:password instead of the correct rcon password.
-cvar_t cmd_allowaccess	= SCVAR("cmd_allowaccess", "0");	//set to 1 to allow cmd to execute console commands on the server.
-cvar_t cmd_gamecodelevel	= SCVAR("cmd_gamecodelevel", STRINGIFY(RESTRICT_LOCAL));	//execution level which gamecode is told about (for unrecognised commands)
+cvar_t	sv_cmdlikercon	= CVAR("sv_cmdlikercon", "0");	//set to 1 to allow a password of username:password instead of the correct rcon password.
+cvar_t cmd_allowaccess	= CVAR("cmd_allowaccess", "0");	//set to 1 to allow cmd to execute console commands on the server.
+cvar_t cmd_gamecodelevel	= CVAR("cmd_gamecodelevel", STRINGIFY(RESTRICT_LOCAL));	//execution level which gamecode is told about (for unrecognised commands)
 
 cvar_t	sv_pure	= CVARFD("sv_pure", "", CVAR_SERVERINFO, "The most evil cvar in the world, many clients will ignore this.\n0=standard quake rules.\n1=clients should prefer files within packages present on the server.\n2=clients should use *only* files within packages present on the server.\nDue to quake 1.01/1.06 differences, a setting of 2 only works in total conversions.");
 cvar_t	sv_nqplayerphysics	= CVARAD("sv_nqplayerphysics", "0", "sv_nomsec", "Disable player prediction and run NQ-style player physics instead. This can be used for compatibility with mods that expect exact behaviour.");
@@ -98,14 +98,14 @@ extern cvar_t	pm_airstep;
 extern cvar_t	pm_walljump;
 extern cvar_t	pm_watersinkspeed;
 extern cvar_t	pm_flyfriction;
-cvar_t sv_pushplayers = SCVAR("sv_pushplayers", "0");
+cvar_t sv_pushplayers = CVAR("sv_pushplayers", "0");
 
 //yes, realip cvars need to be fully initialised or realip will be disabled
 cvar_t sv_getrealip = CVARD("sv_getrealip", "0", "Attempt to obtain a more reliable IP for clients, rather than just their proxy.");
-cvar_t sv_realip_kick = SCVAR("sv_realip_kick", "0");
+cvar_t sv_realip_kick = CVAR("sv_realip_kick", "0");
 cvar_t sv_realiphostname_ipv4 = CVARD("sv_realiphostname_ipv4", "", "This is the server's public ip:port. This is needed for realip to work when the autodetected/local ip is not globally routable");
 cvar_t sv_realiphostname_ipv6 = CVARD("sv_realiphostname_ipv6", "", "This is the server's public ip:port. This is needed for realip to work when the autodetected/local ip is not globally routable");
-cvar_t sv_realip_timeout = SCVAR("sv_realip_timeout", "10");
+cvar_t sv_realip_timeout = CVAR("sv_realip_timeout", "10");
 
 #ifdef VOICECHAT
 cvar_t sv_voip = CVARD("sv_voip", "1", "Enable reception of voice packets.");
@@ -482,8 +482,8 @@ void SVNQ_New_f (void)
 
 	if (!host_client->pextknown && sv_listen_nq.ival != 1)	//1 acts as a legacy mode, used for clients that can't cope with cmd before serverdata (either because they crash out or because they refuse to send reliables until after they got the first serverdata)
 	{
-		if (!host_client->supportedprotocols)
-		{
+		if (!host_client->supportedprotocols && host_client->netchan.remote_address.type != NA_LOOPBACK)
+		{	//don't override cl_loopbackprotocol's choice
 			char *msg = "cmd protocols\n";
 			ClientReliableWrite_Begin (host_client, svc_stufftext, 2+strlen(msg));
 			ClientReliableWrite_String (host_client, msg);
@@ -696,6 +696,10 @@ void SVNQ_New_f (void)
 	MSG_WriteLong (&host_client->netchan.message, protmain);
 	if (protmain == PROTOCOL_VERSION_RMQ)
 		MSG_WriteLong (&host_client->netchan.message, protfl);
+
+	if (protext2 & PEXT2_PREDINFO)
+		MSG_WriteString(&host_client->netchan.message, gamedir);
+
 	MSG_WriteByte (&host_client->netchan.message, (sv.allocated_client_slots>host_client->max_net_clients)?host_client->max_net_clients:sv.allocated_client_slots);
 
 	if (!coop.value && deathmatch.value)
@@ -1015,7 +1019,7 @@ void SV_SendClientPrespawnInfo(client_t *client)
 			else if (client->prespawn_idx == 4)
 			{
 				ClientReliableWrite_Begin(client, svc_setpause, 2);
-				ClientReliableWrite_Byte (client, sv.paused);
+				ClientReliableWrite_Byte (client, sv.paused!=0);
 			}
 			else
 			{
@@ -1069,15 +1073,17 @@ void SV_SendClientPrespawnInfo(client_t *client)
 
 				if (client->prespawn_idx >= maxclientsupportedsounds || !sv.strings.sound_precache[client->prespawn_idx])
 				{
+					//write final-end-of-list
+					MSG_WriteByte (&client->netchan.message, 0);
+					MSG_WriteByte (&client->netchan.message, 0);
+					started = 0;
+
 					if (sv.strings.sound_precache[client->prespawn_idx] && !(client->plimitwarned & PLIMIT_SOUNDS))
 					{
 						client->plimitwarned |= PLIMIT_SOUNDS;
 						SV_ClientPrintf(client, PRINT_HIGH, "WARNING: Your client's network protocol only supports %i sounds. Please upgrade or enable extensions.\n", client->prespawn_idx);
 					}
-					//write final-end-of-list
-					MSG_WriteByte (&client->netchan.message, 0);
-					MSG_WriteByte (&client->netchan.message, 0);
-					started = 0;
+
 					client->prespawn_stage++;
 					client->prespawn_idx = 0;
 					break;
@@ -1171,15 +1177,16 @@ void SV_SendClientPrespawnInfo(client_t *client)
 
 				if (client->prespawn_idx >= client->maxmodels || !sv.strings.model_precache[client->prespawn_idx])
 				{
+					//write final-end-of-list
+					MSG_WriteByte (&client->netchan.message, 0);
+					MSG_WriteByte (&client->netchan.message, 0);
+					started = 0;
+
 					if (sv.strings.model_precache[client->prespawn_idx] && !(client->plimitwarned & PLIMIT_MODELS))
 					{
 						client->plimitwarned |= PLIMIT_MODELS;
 						SV_ClientPrintf(client, PRINT_HIGH, "WARNING: Your client's network protocol only supports %i models. Please upgrade or enable extensions.\n", client->prespawn_idx);
 					}
-					//write final-end-of-list
-					MSG_WriteByte (&client->netchan.message, 0);
-					MSG_WriteByte (&client->netchan.message, 0);
-					started = 0;
 
 					client->prespawn_stage++;
 					client->prespawn_idx = 0;
@@ -2045,7 +2052,7 @@ void SV_Begin_f (void)
 			ClientReliableWrite_Begin (host_client, svc_setpause, 2);
 			ClientReliableWrite_Byte (host_client, sv.paused!=0);
 		}
-		if (sv.paused&~4)
+		if (sv.paused&~PAUSE_AUTO)
 			SV_ClientTPrintf(host_client, PRINT_HIGH, "server is paused\n");
 	}
 
@@ -3781,7 +3788,7 @@ qboolean SV_TogglePause (client_t *initiator)
 {
 	int newv;
 
-	newv = sv.paused^1;
+	newv = sv.paused^PAUSE_EXPLICIT;
 
 	if (!PR_ShouldTogglePause(initiator, newv))
 		return false;
@@ -3815,7 +3822,7 @@ void SV_Pause_f (void)
 
 	if (SV_TogglePause(host_client))
 	{
-		if (sv.paused & 1)
+		if (sv.paused & PAUSE_EXPLICIT)
 			SV_BroadcastTPrintf (PRINT_HIGH, "%s paused the game\n", host_client->name);
 		else
 			SV_BroadcastTPrintf (PRINT_HIGH, "%s unpaused the game\n", host_client->name);
@@ -4421,9 +4428,6 @@ void Cmd_God_f (void)
 
 void Cmd_Give_f (void)
 {
-	char *t;
-	int v;
-
 #ifdef HLSERVER
 	if (svs.gametype == GT_HALFLIFE)
 	{
@@ -4441,48 +4445,49 @@ void Cmd_Give_f (void)
 	if (!svprogfuncs)
 		return;
 
-	t = Cmd_Argv(1);
-	v = atoi (Cmd_Argv(2));
-
 	SV_LogPlayer(host_client, "give cheat");
 #ifdef QUAKESTATS
-	if (strlen(t) == 1 && (Cmd_Argc() == 3 || (*t>='0' && *t <= '9')))
 	{
-		switch (t[0])
+		char *t = Cmd_Argv(1);
+		if (strlen(t) == 1 && (Cmd_Argc() == 3 || (*t>='0' && *t <= '9')))
 		{
-		case '2':
-		case '3':
-		case '4':
-		case '5':
-		case '6':
-		case '7':
-		case '8':
-		case '9':
-			sv_player->v->items = (int) sv_player->v->items | IT_SHOTGUN<< (t[0] - '2');
-			break;
+			int v = atoi (Cmd_Argv(2));
+			switch (t[0])
+			{
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9':
+				sv_player->v->items = (int) sv_player->v->items | IT_SHOTGUN<< (t[0] - '2');
+				break;
 
-		case 's':
-			sv_player->v->ammo_shells = v;
-			break;
-		case 'n':
-			sv_player->v->ammo_nails = v;
-			break;
-		case 'r':
-			sv_player->v->ammo_rockets = v;
-			break;
-		case 'h':
-			sv_player->v->health = v;
-			break;
-		case 'c':
-			sv_player->v->ammo_cells = v;
-			break;
-		default:
-			SV_TPrintToClient(host_client, PRINT_HIGH, "give: unknown item\n");
+			case 's':
+				sv_player->v->ammo_shells = v;
+				break;
+			case 'n':
+				sv_player->v->ammo_nails = v;
+				break;
+			case 'r':
+				sv_player->v->ammo_rockets = v;
+				break;
+			case 'h':
+				sv_player->v->health = v;
+				break;
+			case 'c':
+				sv_player->v->ammo_cells = v;
+				break;
+			default:
+				SV_TPrintToClient(host_client, PRINT_HIGH, "give: unknown item\n");
+			}
+			return;
 		}
 	}
-	else
 #endif
-		if (svprogfuncs->EvaluateDebugString)
+	if (svprogfuncs->EvaluateDebugString)
 	{
 		if (developer.value < 2 && host_client->netchan.remote_address.type != NA_LOOPBACK)	//we don't want clients doing nasty things... like setting movetype 3123
 		{
@@ -5420,7 +5425,7 @@ void SVNQ_Begin_f (void)
 			ClientReliableWrite_Begin (host_client, svc_setpause, 2);
 			ClientReliableWrite_Byte (host_client, sv.paused!=0);
 		}
-		if (sv.paused&~4)
+		if (sv.paused&~PAUSE_AUTO)
 			SV_ClientTPrintf(host_client, PRINT_HIGH, "server is paused\n");
 	}
 
@@ -5483,7 +5488,7 @@ void SVNQ_PreSpawn_f (void)
 				prot = " (dpp7)";
 				break;
 			}
-			Con_Printf("Warning: %s cannot be enforced on player %s%s.\n", sv_mapcheck.name, host_client->name, prot);	//as you can fake it in a client anyway, this is hardly a significant issue.
+			Con_DPrintf("Warning: %s cannot be enforced on player %s%s.\n", sv_mapcheck.name, host_client->name, prot);	//as you can fake it in a client anyway, this is hardly a significant issue.
 		}
 	}
 
@@ -7238,11 +7243,6 @@ void SV_ExecuteClientMessage (client_t *cl)
 
 		if (sv_antilag.ival || !*sv_antilag.string)
 		{
-			/*
-			extern cvar_t temp1;
-			if (temp1.ival)
-			frame = &cl->frameunion.frames[(cl->netchan.incoming_acknowledged+temp1.ival) & UPDATE_MASK];
-			*/
 #ifdef warningmsg
 #pragma warningmsg("FIXME: make antilag optionally support non-player ents too")
 #endif
@@ -7393,7 +7393,7 @@ void SV_ExecuteClientMessage (client_t *cl)
 				}
 				else
 #endif
-				if (!sv.paused)
+					if (!sv.paused && sv.world.worldmodel && sv.world.worldmodel->loadstate == MLS_LOADED)
 				{
 					if (sv_nqplayerphysics.ival || split->state < cs_spawned)
 					{
@@ -7739,8 +7739,15 @@ void SVNQ_ReadClientMove (usercmd_t *move)
 
 	frame = &host_client->frameunion.frames[host_client->netchan.incoming_acknowledged & UPDATE_MASK];
 
-	if (host_client->protocol == SCP_DARKPLACES7 || (host_client->fteprotocolextensions2 & PEXT2_PREDINFO))
+	if (host_client->protocol == SCP_DARKPLACES7)
 		host_client->last_sequence = MSG_ReadLong ();
+	else if (host_client->fteprotocolextensions2 & PEXT2_PREDINFO)
+	{
+		int seq = (unsigned short)MSG_ReadShort ();
+		if (seq < (host_client->last_sequence&0xffff))
+			host_client->last_sequence += 0x10000;	//wrapped
+		host_client->last_sequence = (host_client->last_sequence&0xffff0000) | seq;
+	}
 	else
 		host_client->last_sequence = 0;
 	cltime = MSG_ReadFloat ();
@@ -7807,9 +7814,9 @@ void SVNQ_ReadClientMove (usercmd_t *move)
 		SV_ReadPrydonCursor();
 	}
 
-	host_client->msecs -= move->msec;
 	if (SV_RunFullQCMovement(host_client, move))
 	{
+		host_client->msecs -= move->msec;
 		pr_global_struct->time = sv.world.physicstime;
 		pr_global_struct->self = EDICT_TO_PROG(svprogfuncs, sv_player);
 #ifdef VM_Q1
@@ -7948,6 +7955,8 @@ void SVNQ_ExecuteClientMessage (client_t *cl)
 
 		case clcdp_ackframe:
 			cl->delta_sequence = MSG_ReadLong();
+			if (cl->delta_sequence == -1 && cl->pendingdeltabits)
+				cl->pendingdeltabits[0] = UF_REMOVE;
 			SV_AckEntityFrame(cl, cl->delta_sequence);
 			break;
 		case clcdp_ackdownloaddata:

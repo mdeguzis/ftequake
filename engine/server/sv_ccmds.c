@@ -37,7 +37,7 @@ qboolean SV_MayCheat(void)
 }
 
 extern cvar_t cl_warncmd;
-cvar_t sv_cheats = SCVARF("sv_cheats", "0", CVAR_LATCH);
+cvar_t sv_cheats = CVARF("sv_cheats", "0", CVAR_LATCH);
 	extern		redirect_t	sv_redirected;
 
 extern cvar_t sv_public;
@@ -439,7 +439,9 @@ void SV_Map_f (void)
 	qboolean flushparms		= false;	//flush parms+serverflags
 	qboolean cinematic		= false;	//new map is .cin / .roq or something
 	qboolean q2savetos0		= false;
+#ifdef Q3SERVER
 	qboolean q3singleplayer	= false;	//forces g_gametype to 2 (otherwise clears if it was 2).
+#endif
 
 	qboolean waschangelevel	= false;
 	int i;
@@ -471,7 +473,9 @@ void SV_Map_f (void)
 	startspot = ((Cmd_Argc() == 2)?NULL:Cmd_Argv(2));
 
 	q2savetos0 = !strcmp(Cmd_Argv(0), "gamemap") && !isDedicated;	//q2
+#ifdef Q3SERVER
 	q3singleplayer = !strcmp(Cmd_Argv(0), "spmap");
+#endif
 	flushparms = !strcmp(Cmd_Argv(0), "map") || !strcmp(Cmd_Argv(0), "spmap");
 	newunit = flushparms || (!strcmp(Cmd_Argv(0), "changelevel") && !startspot);
 
@@ -1197,10 +1201,6 @@ char *SV_BannedReason (netadr_t *a)
 	}
 	return reason;
 }
-
-#ifdef _MSC_VER
-#define strtoull _strtoui64
-#endif
 
 static void SV_FilterIP_f (void)
 {
@@ -2425,36 +2425,64 @@ static void SV_Gamedir (void)
 SV_Gamedir_f
 
 Sets the gamedir and path to a different directory.
+FIXME: should block this if we're on a server at the time
 ================
 */
 static void SV_Gamedir_f (void)
 {
 	char			*dir;
+	int argc = Cmd_Argc();
 
-	if (Cmd_Argc() == 1)
+	if (argc == 1)
 	{
 		Con_TPrintf ("Current gamedir: %s\n", FS_GetGamedir(true));
 		return;
 	}
 
-	if (Cmd_Argc() != 2)
+	if (argc < 2)
 	{
 		Con_TPrintf ("Usage: gamedir <newgamedir>\n");
 		return;
 	}
 
-	dir = Cmd_Argv(1);
+	if (argc == 2)
+		dir = Z_StrDup(Cmd_Argv(1));
+	else
+	{
+		int i;
+		size_t l = 1;
+		for (i = 1; i < argc; i++)
+			l += strlen(Cmd_Argv(i))+1;
+		dir = Z_Malloc(l);
+		for (i = 1; i < argc; i++)
+		{	//disgusting hack for quakespasm's "game extendedgame -missionpack" crap.
+			//games with a leading hypen are inserted before others, with the hyphen ignored.
+			if (*Cmd_Argv(i) != '-')
+				continue;
+			if (*dir)
+				Q_strncatz(dir, ";", l);
+			Q_strncatz(dir, Cmd_Argv(i)+1, l);
+		}
+		for (i = 1; i < argc; i++)
+		{
+			if (*Cmd_Argv(i) == '-')
+				continue;
+			if (*dir)
+				Q_strncatz(dir, ";", l);
+			Q_strncatz(dir, Cmd_Argv(i), l);
+		}
+	}
 
 	if (strstr(dir, "..") || strstr(dir, "/")
 		|| strstr(dir, "\\") || strstr(dir, ":") )
 	{
 		Con_TPrintf ("%s should be a single filename, not a path\n", Cmd_Argv(0));
-		return;
 	}
-
-	dir = Z_StrDup(dir);
-	COM_Gamedir (dir, NULL);
-	Info_SetValueForStarKey (svs.info, "*gamedir", dir, MAX_SERVERINFO_STRING);
+	else
+	{
+		COM_Gamedir (dir, NULL);
+		Info_SetValueForStarKey (svs.info, "*gamedir", dir, MAX_SERVERINFO_STRING);
+	}
 	Z_Free(dir);
 }
 

@@ -25,6 +25,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <ctype.h>
 #include <errno.h>
 
+//by adding 'extern' to one definition of a function in a translation unit, then the definition in that TU is NOT considered an inline definition. meaning non-inlined references in other TUs can link to it instead of their own if needed.
+fte_inlinebody conchar_t *Font_Decode(conchar_t *start, unsigned int *codeflags, unsigned int *codepoint);
+
+
 // These 4 libraries required for the version command
 
 #if defined(MINGW)
@@ -1186,6 +1190,7 @@ void MSG_WriteDeltaUsercmd (sizebuf_t *buf, usercmd_t *from, usercmd_t *cmd)
 #ifdef Q2CLIENT
 	if (cls.protocol == CP_QUAKE2)
 	{
+		unsigned char buttons = 0;
 		if (cmd->angles[0] != from->angles[0])
 			bits |= Q2CM_ANGLE1;
 		if (cmd->angles[1] != from->angles[1])
@@ -1203,27 +1208,79 @@ void MSG_WriteDeltaUsercmd (sizebuf_t *buf, usercmd_t *from, usercmd_t *cmd)
 		if (cmd->impulse != from->impulse)
 			bits |= Q2CM_IMPULSE;
 
+
+		if (buf->prim.flags & NPQ2_R1Q2_UCMD)
+		{
+			if (bits & Q2CM_ANGLE1)
+				buttons = cmd->buttons & (1|2|128);	//attack, jump, any.
+			if ((bits & Q2CM_FORWARD) && !(cmd->forwardmove % 5) && abs(cmd->forwardmove/5) < 128)
+				buttons |= R1Q2_BUTTON_BYTE_FORWARD;
+			if ((bits & Q2CM_SIDE) && !(cmd->sidemove % 5) && abs(cmd->sidemove/5) < 128)
+				buttons |= R1Q2_BUTTON_BYTE_SIDE;
+			if ((bits & Q2CM_UP) && !(cmd->upmove % 5) && abs(cmd->upmove/5) < 128)
+				buttons |= R1Q2_BUTTON_BYTE_UP;
+			if ((bits & Q2CM_ANGLE1) && !(cmd->angles[0] % 64) && abs(cmd->angles[0] / 64) < 128)
+				buttons |= R1Q2_BUTTON_BYTE_ANGLE1;
+			if ((bits & Q2CM_ANGLE2) && !(cmd->angles[1] % 256))
+				buttons |= R1Q2_BUTTON_BYTE_ANGLE2;
+			if (buttons & (R1Q2_BUTTON_BYTE_FORWARD|R1Q2_BUTTON_BYTE_SIDE|R1Q2_BUTTON_BYTE_UP|R1Q2_BUTTON_BYTE_ANGLE1|R1Q2_BUTTON_BYTE_ANGLE2))
+				bits |= Q2CM_BUTTONS;
+		}
+
 		MSG_WriteByte (buf, bits);
+		if (buf->prim.flags & NPQ2_R1Q2_UCMD)
+		{
+			if (bits & Q2CM_BUTTONS)
+				MSG_WriteByte (buf, buttons);
+		}
 
 		if (bits & Q2CM_ANGLE1)
-			MSG_WriteShort (buf, cmd->angles[0]);
+		{
+			if (buttons & R1Q2_BUTTON_BYTE_ANGLE1)
+				MSG_WriteChar (buf, cmd->angles[0] / 64);
+			else
+				MSG_WriteShort (buf, cmd->angles[0]);
+		}
 		if (bits & Q2CM_ANGLE2)
-			MSG_WriteShort (buf, cmd->angles[1]);
+		{
+			if (buttons & R1Q2_BUTTON_BYTE_ANGLE2)
+				MSG_WriteChar (buf, cmd->angles[1] / 256);
+			else
+				MSG_WriteShort (buf, cmd->angles[1]);
+		}
 		if (bits & Q2CM_ANGLE3)
 			MSG_WriteShort (buf, cmd->angles[2]);
 
 		if (bits & Q2CM_FORWARD)
-			MSG_WriteShort (buf, cmd->forwardmove);
+		{
+			if (buttons & R1Q2_BUTTON_BYTE_FORWARD)
+				MSG_WriteChar (buf, cmd->forwardmove/5);
+			else
+				MSG_WriteShort (buf, cmd->forwardmove);
+		}
 		if (bits & Q2CM_SIDE)
-	  		MSG_WriteShort (buf, cmd->sidemove);
+		{
+			if (buttons & R1Q2_BUTTON_BYTE_SIDE)
+				MSG_WriteChar (buf, cmd->sidemove/5);
+			else
+				MSG_WriteShort (buf, cmd->sidemove);
+		}
 		if (bits & Q2CM_UP)
-			MSG_WriteShort (buf, cmd->upmove);
+		{
+			if (buttons & R1Q2_BUTTON_BYTE_UP)
+				MSG_WriteChar (buf, cmd->upmove/5);
+			else
+				MSG_WriteShort (buf, cmd->upmove);
+		}
 
- 		if (bits & Q2CM_BUTTONS)
-	  		MSG_WriteByte (buf, cmd->buttons);
- 		if (bits & Q2CM_IMPULSE)
+		if (!(buf->prim.flags & NPQ2_R1Q2_UCMD))
+		{
+			if (bits & Q2CM_BUTTONS)
+				MSG_WriteByte (buf, cmd->buttons);
+		}
+		if (bits & Q2CM_IMPULSE)
 			MSG_WriteByte (buf, cmd->impulse);
-		MSG_WriteByte (buf, bound(0, cmd->msec, 255));
+		MSG_WriteByte (buf, bound(0, cmd->msec, 250));	//clamp msecs to 250, because r1q2 likes kicking us if we stall for any reason
 
 		MSG_WriteByte (buf, cmd->lightlevel);
 
@@ -1260,13 +1317,13 @@ void MSG_WriteDeltaUsercmd (sizebuf_t *buf, usercmd_t *from, usercmd_t *cmd)
 		if (bits & CM_FORWARD)
 			MSG_WriteShort (buf, cmd->forwardmove);
 		if (bits & CM_SIDE)
-	  		MSG_WriteShort (buf, cmd->sidemove);
+			MSG_WriteShort (buf, cmd->sidemove);
 		if (bits & CM_UP)
 			MSG_WriteShort (buf, cmd->upmove);
 
- 		if (bits & CM_BUTTONS)
-	  		MSG_WriteByte (buf, cmd->buttons);
- 		if (bits & CM_IMPULSE)
+		if (bits & CM_BUTTONS)
+			MSG_WriteByte (buf, cmd->buttons);
+		if (bits & CM_IMPULSE)
 			MSG_WriteByte (buf, cmd->impulse);
 		MSG_WriteByte (buf, bound(0, cmd->msec, 255));
 	}
@@ -1760,30 +1817,64 @@ void MSG_ReadDeltaUsercmd (usercmd_t *from, usercmd_t *move)
 void MSGQ2_ReadDeltaUsercmd (usercmd_t *from, usercmd_t *move)
 {
 	int bits;
+	unsigned int buttons = 0;
 
 	memcpy (move, from, sizeof(*move));
 
 	bits = MSG_ReadByte ();
 
+	if (net_message.prim.flags & NPQ2_R1Q2_UCMD)
+		buttons = MSG_ReadByte();
+
 // read current angles
 	if (bits & Q2CM_ANGLE1)
-		move->angles[0] = MSG_ReadShort ();
+	{
+		if (buttons & R1Q2_BUTTON_BYTE_ANGLE1)
+			move->angles[0] = MSG_ReadChar ()*64;
+		else
+			move->angles[0] = MSG_ReadShort ();
+	}
 	if (bits & Q2CM_ANGLE2)
-		move->angles[1] = MSG_ReadShort ();
+	{
+		if (buttons & R1Q2_BUTTON_BYTE_ANGLE2)
+			move->angles[1] = MSG_ReadChar ()*256;
+		else
+			move->angles[1] = MSG_ReadShort ();
+	}
 	if (bits & Q2CM_ANGLE3)
 		move->angles[2] = MSG_ReadShort ();
 
 // read movement
 	if (bits & Q2CM_FORWARD)
-		move->forwardmove = MSG_ReadShort ();
+	{
+		if (buttons & R1Q2_BUTTON_BYTE_FORWARD)
+			move->forwardmove = MSG_ReadChar ()*5;
+		else
+			move->forwardmove = MSG_ReadShort ();
+	}
 	if (bits & Q2CM_SIDE)
-		move->sidemove = MSG_ReadShort ();
+	{
+		if (buttons & R1Q2_BUTTON_BYTE_SIDE)
+			move->sidemove = MSG_ReadChar ()*5;
+		else
+			move->sidemove = MSG_ReadShort ();
+	}
 	if (bits & Q2CM_UP)
-		move->upmove = MSG_ReadShort ();
+	{
+		if (buttons & R1Q2_BUTTON_BYTE_UP)
+			move->upmove = MSG_ReadChar ()*5;
+		else
+			move->upmove = MSG_ReadShort ();
+	}
 
 // read buttons
 	if (bits & Q2CM_BUTTONS)
-		move->buttons = MSG_ReadByte ();
+	{
+		if (net_message.prim.flags & NPQ2_R1Q2_UCMD)
+			move->buttons = buttons & (1|2|128);	//only use the bits that are actually buttons, so gamecode can't get excited despite being crippled by this.
+		else
+			move->buttons = MSG_ReadByte ();
+	}
 	move->buttons_compat = move->buttons & 0xff;
 
 	if (bits & Q2CM_IMPULSE)
@@ -2791,6 +2882,7 @@ char *COM_DeFunString(conchar_t *str, conchar_t *stop, char *out, int outsize, q
 	return out;
 }
 
+#ifndef NOLEGACY
 static unsigned int koi2wc (unsigned char uc)
 {
 	static const char koi2wc_table[64] =
@@ -2827,6 +2919,7 @@ static unsigned int koi2wc (unsigned char uc)
 	else
 		return uc;
 }
+#endif
 
 enum
 {
@@ -4346,11 +4439,12 @@ void COM_ParsePlusSets (qboolean docbuf)
 		{
 			if (!strcmp(com_argv[i], "+set") || !strcmp(com_argv[i], "+seta"))
 			{
+				char buf[8192];
 				Cbuf_AddText(com_argv[i]+1, RESTRICT_LOCAL);
 				Cbuf_AddText(" ", RESTRICT_LOCAL);
-				Cbuf_AddText(com_argv[i+1], RESTRICT_LOCAL);
+				Cbuf_AddText(COM_QuotedString(com_argv[i+1], buf, sizeof(buf), false), RESTRICT_LOCAL);
 				Cbuf_AddText(" ", RESTRICT_LOCAL);
-				Cbuf_AddText(com_argv[i+2], RESTRICT_LOCAL);
+				Cbuf_AddText(COM_QuotedString(com_argv[i+2], buf, sizeof(buf), false), RESTRICT_LOCAL);
 				Cbuf_AddText("\n", RESTRICT_LOCAL);
 			}
 		}
@@ -4547,6 +4641,9 @@ void COM_Version_f (void)
 #ifdef GLSLONLY
 	Con_Printf("(GLSL)");
 #endif
+#endif
+#ifdef VKQUAKE
+	Con_Printf(" Vulkan");
 #endif
 #ifdef D3D9QUAKE
 	Con_Printf(" Direct3D9");
@@ -5069,7 +5166,7 @@ static int COM_WorkerThread(void *arg)
 static void Sys_ErrorThread(void *ctx, void *data, size_t a, size_t b)
 {
 	//posted to main thread from a worker.
-	Sys_Error(data);
+	Sys_Error("%s", (const char*)data);
 }
 void COM_WorkerAbort(char *message)
 {

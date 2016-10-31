@@ -2753,7 +2753,7 @@ ftenet_generic_connection_t *FTENET_Generic_EstablishConnection(int adrfamily, i
 		setsockopt(newsocket, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&_true, sizeof(_true));
 #endif
 
-#ifdef _WIN32 
+#if defined(_WIN32) && defined(SO_EXCLUSIVEADDRUSE)
 	//win32 is so fucked up
 	setsockopt(newsocket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char *)&_true, sizeof(_true));
 #endif
@@ -2785,6 +2785,19 @@ ftenet_generic_connection_t *FTENET_Generic_EstablishConnection(int adrfamily, i
 	if (ioctlsocket (newsocket, FIONBIO, &_true) == -1)
 		Sys_Error ("UDP_OpenSocket: ioctl FIONBIO: %s", strerror(neterrno()));
 
+	//ipv6 sockets need to add themselves to a multicast group, so that we can receive broadcasts on a lan
+#if defined(IPPROTO_IPV6)
+	if (family == AF_INET6 || hybrid || isserver)
+	{
+		struct ipv6_mreq req;
+		memset(&req, 0, sizeof(req));
+		req.ipv6mr_multiaddr.s6_addr[0] = 0xff;
+		req.ipv6mr_multiaddr.s6_addr[1] = 0x02;
+		req.ipv6mr_multiaddr.s6_addr[15]= 0x01;
+		req.ipv6mr_interface = 0;
+		setsockopt(newsocket, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char *)&req, sizeof(req));
+	}
+#endif
 
 	//
 	// determine my name & address if we don't already know it
@@ -3423,14 +3436,14 @@ handshakeerror:
 						if (payoffs + 8 > st->inlen)
 							break;
 						ullpaylen = 
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+0]<<56ull |
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+1]<<48ull |
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+2]<<40ull |
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+3]<<32ull |
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+4]<<24ull |
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+5]<<16ull |
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+6]<< 8ull |
-							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+7]<< 0ull;
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+0]<<56u |
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+1]<<48u |
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+2]<<40u |
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+3]<<32u |
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+4]<<24u |
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+5]<<16u |
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+6]<< 8u |
+							(quint64_t)((unsigned char*)st->inbuffer)[payoffs+7]<< 0u;
 						if (ullpaylen < 0x10000)
 						{
 							Con_Printf ("%s: payload size (%"PRIu64") encoded badly\n", NET_AdrToString (adr, sizeof(adr), &st->remoteaddr), ullpaylen);

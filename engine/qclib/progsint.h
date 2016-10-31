@@ -1,3 +1,6 @@
+#ifndef PROGSINT_H_INCLUDED
+#define PROGSINT_H_INCLUDED
+
 #ifdef _WIN32
 	#ifndef _CRT_SECURE_NO_WARNINGS
 		#define _CRT_SECURE_NO_WARNINGS
@@ -65,7 +68,7 @@ typedef struct
 	unsigned char	progsnum;
 	int				s;
 	int				pushed;
-	unsigned long long	timestamp;
+	prclocks_t		timestamp;
 } prstack_t;
 
 typedef struct
@@ -134,7 +137,7 @@ typedef struct prinst_s
 	int exitdepth;
 
 	pbool profiling;
-	unsigned long long profilingalert;
+	prclocks_t profilingalert;
 	mfunction_t	*pr_xfunction;
 #define pr_xfunction prinst.pr_xfunction
 	int pr_xstatement;
@@ -280,7 +283,7 @@ int PDECL Comp_Continue(pubprogfuncs_t *progfuncs);
 pbool PDECL PR_SetWatchPoint(pubprogfuncs_t *progfuncs, char *key);
 char *PDECL PR_EvaluateDebugString(pubprogfuncs_t *progfuncs, char *key);
 char *PDECL PR_SaveEnts(pubprogfuncs_t *progfuncs, char *mem, size_t *size, size_t maxsize, int mode);
-int PDECL PR_LoadEnts(pubprogfuncs_t *progfuncs, const char *file, float killonspawnflags);
+int PDECL PR_LoadEnts(pubprogfuncs_t *progfuncs, const char *file, void *ctx, void (PDECL *callback) (pubprogfuncs_t *progfuncs, struct edict_s *ed, void *ctx, const char *entstart, const char *entend));
 char *PDECL PR_SaveEnt (pubprogfuncs_t *progfuncs, char *buf, size_t *size, size_t maxsize, struct edict_s *ed);
 struct edict_s *PDECL PR_RestoreEnt (pubprogfuncs_t *progfuncs, const char *buf, size_t *size, struct edict_s *ed);
 void PDECL PR_StackTrace (pubprogfuncs_t *progfuncs, int showlocals);
@@ -449,7 +452,8 @@ fdef_t *PDECL ED_FieldInfo (pubprogfuncs_t *progfuncs, unsigned int *count);
 char *PDECL PR_UglyValueString (pubprogfuncs_t *progfuncs, etype_t type, eval_t *val);
 pbool	PDECL ED_ParseEval (pubprogfuncs_t *progfuncs, eval_t *eval, int type, const char *s);
 
-unsigned long long Sys_GetClockRate(void);
+
+prclocks_t Sys_GetClockRate(void);
 #endif
 
 
@@ -516,4 +520,6 @@ void PR_CloseJit(struct jitstate *jit);
 char *QCC_COM_Parse (const char *data);
 extern char	qcc_token[1024];
 extern char *basictypenames[];
+#endif
+
 #endif

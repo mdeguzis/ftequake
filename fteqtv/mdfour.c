@@ -24,7 +24,7 @@
 		59 Temple Place - Suite 330
 		Boston, MA  02111-1307, USA
 
-	$Id$
+	$Id: mdfour.c 2557 2007-08-01 14:55:28Z acceptthis $
 */
 
 #include "qtv.h"

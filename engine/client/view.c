@@ -44,62 +44,62 @@ when crossing a water boudnary.
 */
 
 #ifdef SIDEVIEWS
-cvar_t	vsec_enabled[SIDEVIEWS] = {SCVAR("v2_enabled", "2"),	SCVAR("v3_enabled", "0"),	SCVAR("v4_enabled", "0"),	SCVAR("v5_enabled", "0")};
-cvar_t	vsec_x[SIDEVIEWS]		= {SCVAR("v2_x", "0"),			SCVAR("v3_x", "0.25"),		SCVAR("v4_x", "0.5"),		SCVAR("v5_x", "0.75")};
-cvar_t	vsec_y[SIDEVIEWS]		= {SCVAR("v2_y", "0"),			SCVAR("v3_y", "0"),			SCVAR("v4_y", "0"),			SCVAR("v5_y", "0")};
-cvar_t	vsec_scalex[SIDEVIEWS]	= {SCVAR("v2_scalex", "0.25"),	SCVAR("v3_scalex", "0.25"),	SCVAR("v4_scalex", "0.25"),	SCVAR("v5_scalex", "0.25")};
-cvar_t	vsec_scaley[SIDEVIEWS]	= {SCVAR("v2_scaley", "0.25"),	SCVAR("v3_scaley", "0.25"),	SCVAR("v4_scaley", "0.25"),	SCVAR("v5_scaley", "0.25")};
-cvar_t	vsec_yaw[SIDEVIEWS]		= {SCVAR("v2_yaw", "180"),		SCVAR("v3_yaw", "90"),		SCVAR("v4_yaw", "270"),		SCVAR("v5_yaw", "0")};
+cvar_t	vsec_enabled[SIDEVIEWS] = {CVAR("v2_enabled", "2"),		CVAR("v3_enabled", "0"),	CVAR("v4_enabled", "0"),	CVAR("v5_enabled", "0")};
+cvar_t	vsec_x[SIDEVIEWS]		= {CVAR("v2_x", "0"),			CVAR("v3_x", "0.25"),		CVAR("v4_x", "0.5"),		CVAR("v5_x", "0.75")};
+cvar_t	vsec_y[SIDEVIEWS]		= {CVAR("v2_y", "0"),			CVAR("v3_y", "0"),			CVAR("v4_y", "0"),			CVAR("v5_y", "0")};
+cvar_t	vsec_scalex[SIDEVIEWS]	= {CVAR("v2_scalex", "0.25"),	CVAR("v3_scalex", "0.25"),	CVAR("v4_scalex", "0.25"),	CVAR("v5_scalex", "0.25")};
+cvar_t	vsec_scaley[SIDEVIEWS]	= {CVAR("v2_scaley", "0.25"),	CVAR("v3_scaley", "0.25"),	CVAR("v4_scaley", "0.25"),	CVAR("v5_scaley", "0.25")};
+cvar_t	vsec_yaw[SIDEVIEWS]		= {CVAR("v2_yaw", "180"),		CVAR("v3_yaw", "90"),		CVAR("v4_yaw", "270"),		CVAR("v5_yaw", "0")};
 #endif
 
-cvar_t	cl_rollspeed = SCVAR("cl_rollspeed", "200");
-cvar_t	cl_rollangle = SCVAR("cl_rollangle", "2.0");
-cvar_t	v_deathtilt = SCVAR("v_deathtilt", "1");
+cvar_t	cl_rollspeed			= CVAR("cl_rollspeed", "200");
+cvar_t	cl_rollangle			= CVAR("cl_rollangle", "2.0");
+cvar_t	v_deathtilt				= CVAR("v_deathtilt", "1");
 
-cvar_t	cl_bob = SCVAR("cl_bob","0.02");
-cvar_t	cl_bobcycle = SCVAR("cl_bobcycle","0.6");
-cvar_t	cl_bobup = SCVAR("cl_bobup","0.5");
+cvar_t	cl_bob					= CVAR("cl_bob","0.02");
+cvar_t	cl_bobcycle				= CVAR("cl_bobcycle","0.6");
+cvar_t	cl_bobup				= CVAR("cl_bobup","0.5");
 
-cvar_t	v_kicktime = SCVAR("v_kicktime", "0.5");
-cvar_t	v_kickroll = SCVAR("v_kickroll", "0.6");
-cvar_t	v_kickpitch = SCVAR("v_kickpitch", "0.6");
+cvar_t	v_kicktime				= CVAR("v_kicktime", "0.5");
+cvar_t	v_kickroll				= CVAR("v_kickroll", "0.6");
+cvar_t	v_kickpitch				= CVAR("v_kickpitch", "0.6");
 
-cvar_t	v_iyaw_cycle = SCVAR("v_iyaw_cycle", "2");
-cvar_t	v_iroll_cycle = SCVAR("v_iroll_cycle", "0.5");
-cvar_t	v_ipitch_cycle = SCVAR("v_ipitch_cycle", "1");
-cvar_t	v_iyaw_level = SCVAR("v_iyaw_level", "0.3");
-cvar_t	v_iroll_level = SCVAR("v_iroll_level", "0.1");
-cvar_t	v_ipitch_level = SCVAR("v_ipitch_level", "0.3");
-cvar_t	v_idlescale = SCVAR("v_idlescale", "0");
+cvar_t	v_iyaw_cycle			= CVAR("v_iyaw_cycle", "2");
+cvar_t	v_iroll_cycle			= CVAR("v_iroll_cycle", "0.5");
+cvar_t	v_ipitch_cycle			= CVAR("v_ipitch_cycle", "1");
+cvar_t	v_iyaw_level			= CVAR("v_iyaw_level", "0.3");
+cvar_t	v_iroll_level			= CVAR("v_iroll_level", "0.1");
+cvar_t	v_ipitch_level			= CVAR("v_ipitch_level", "0.3");
+cvar_t	v_idlescale				= CVAR("v_idlescale", "0");
 
-cvar_t	crosshair = SCVARF("crosshair", "1", CVAR_ARCHIVE);
-cvar_t	crosshaircolor = SCVARF("crosshaircolor", "255 255 255", CVAR_ARCHIVE);
-cvar_t	crosshairsize = SCVARF("crosshairsize", "8", CVAR_ARCHIVE);
+cvar_t	crosshair				= CVARF("crosshair", "1", CVAR_ARCHIVE);
+cvar_t	crosshaircolor			= CVARF("crosshaircolor", "255 255 255", CVAR_ARCHIVE);
+cvar_t	crosshairsize			= CVARF("crosshairsize", "8", CVAR_ARCHIVE);
 
-cvar_t  cl_crossx = SCVARF("cl_crossx", "0", CVAR_ARCHIVE);
-cvar_t  cl_crossy = SCVARF("cl_crossy", "0", CVAR_ARCHIVE);
-cvar_t	crosshaircorrect = SCVARF("crosshaircorrect", "0", CVAR_SEMICHEAT);
-cvar_t	crosshairimage = SCVAR("crosshairimage", "");
-cvar_t	crosshairalpha = SCVAR("crosshairalpha", "1");
+cvar_t  cl_crossx				= CVARF("cl_crossx", "0", CVAR_ARCHIVE);
+cvar_t  cl_crossy				= CVARF("cl_crossy", "0", CVAR_ARCHIVE);
+cvar_t	crosshaircorrect		= CVARF("crosshaircorrect", "0", CVAR_SEMICHEAT);
+cvar_t	crosshairimage			= CVAR("crosshairimage", "");
+cvar_t	crosshairalpha			= CVAR("crosshairalpha", "1");
 
-cvar_t	gl_cshiftpercent = SCVAR("gl_cshiftpercent", "100");
-cvar_t	gl_cshiftenabled = CVARF("gl_polyblend", "1", CVAR_ARCHIVE);
+cvar_t	gl_cshiftpercent		= CVAR("gl_cshiftpercent", "100");
+cvar_t	gl_cshiftenabled		= CVARF("gl_polyblend", "1", CVAR_ARCHIVE);
 
-cvar_t	v_bonusflash = SCVAR("v_bonusflash", "1");
+cvar_t	v_bonusflash			= CVAR("v_bonusflash", "1");
 
-cvar_t  v_contentblend = SCVARF("v_contentblend", "1", CVAR_ARCHIVE);
-cvar_t	v_damagecshift = SCVAR("v_damagecshift", "1");
-cvar_t	v_quadcshift = SCVAR("v_quadcshift", "1");
-cvar_t	v_suitcshift = SCVAR("v_suitcshift", "1");
-cvar_t	v_ringcshift = SCVAR("v_ringcshift", "1");
-cvar_t	v_pentcshift = SCVAR("v_pentcshift", "1");
-cvar_t	v_gunkick = SCVAR("v_gunkick", "0");
-cvar_t	v_gunkick_q2 = SCVAR("v_gunkick_q2", "1");
+cvar_t  v_contentblend			= CVARF("v_contentblend", "1", CVAR_ARCHIVE);
+cvar_t	v_damagecshift			= CVAR("v_damagecshift", "1");
+cvar_t	v_quadcshift			= CVAR("v_quadcshift", "1");
+cvar_t	v_suitcshift			= CVAR("v_suitcshift", "1");
+cvar_t	v_ringcshift			= CVAR("v_ringcshift", "1");
+cvar_t	v_pentcshift			= CVAR("v_pentcshift", "1");
+cvar_t	v_gunkick				= CVAR("v_gunkick", "0");
+cvar_t	v_gunkick_q2			= CVAR("v_gunkick_q2", "1");
 
-cvar_t	v_viewheight = SCVAR("v_viewheight", "0");
-cvar_t	v_projectionmode = SCVAR("v_projectionmode", "0");
+cvar_t	v_viewheight			= CVAR("v_viewheight", "0");
+cvar_t	v_projectionmode		= CVAR("v_projectionmode", "0");
 
-cvar_t	v_depthsortentities = CVARAD("v_depthsortentities", "0", "v_reorderentitiesrandomly", "Reorder entities for transparency such that the furthest entities are drawn first, allowing nearer transparent entities to draw over the top of them.");
+cvar_t	v_depthsortentities		= CVARAD("v_depthsortentities", "0", "v_reorderentitiesrandomly", "Reorder entities for transparency such that the furthest entities are drawn first, allowing nearer transparent entities to draw over the top of them.");
 
 cvar_t	scr_autoid				= CVARD("scr_autoid", "1", "Display nametags above all players while spectating.");
 cvar_t	scr_autoid_team			= CVARD("scr_autoid_team", "1", "Display nametags above team members. 0: off. 1: display with half-alpha if occluded. 2: hide when occluded.");
@@ -109,9 +109,9 @@ cvar_t	scr_autoid_weapon		= CVARD("scr_autoid_weapon", "1", "Display the player'
 cvar_t	scr_autoid_teamcolour	= CVARD("scr_autoid_teamcolour", STRINGIFY(COLOR_BLUE), "The colour for the text on the nametags of team members.");
 cvar_t	scr_autoid_enemycolour	= CVARD("scr_autoid_enemycolour", STRINGIFY(COLOR_WHITE), "The colour for the text on the nametags of non-team members.");
 
-cvar_t	chase_active = CVAR("chase_active", "0");
-cvar_t	chase_back = CVAR("chase_back", "48");
-cvar_t	chase_up = CVAR("chase_up", "24");
+cvar_t	chase_active			= CVAR("chase_active", "0");
+cvar_t	chase_back				= CVAR("chase_back", "48");
+cvar_t	chase_up				= CVAR("chase_up", "24");
 
 
 extern cvar_t cl_chasecam;
@@ -197,8 +197,8 @@ float V_CalcBob (playerview_t *pv, qboolean queryold)
 //=============================================================================
 
 
-cvar_t	v_centermove = SCVAR("v_centermove", "0.15");
-cvar_t	v_centerspeed = SCVAR("v_centerspeed","500");
+cvar_t	v_centermove = CVAR("v_centermove", "0.15");
+cvar_t	v_centerspeed = CVAR("v_centerspeed","500");
 
 
 void V_StartPitchDrift (playerview_t *pv)
@@ -324,7 +324,6 @@ cvar_t		v_brightness = CVARFDC("brightness", "0.0", CVAR_ARCHIVE, "Brightness is
 qbyte		gammatable[256];	// palette is sent through this
 
 
-unsigned short		ramps[3][256];
 qboolean		gammaworks;
 float		hw_blend[4];		// rgba 0.0 - 1.0
 /*
@@ -849,6 +848,9 @@ void V_UpdatePalette (qboolean force)
 	if (hw_blend[0] != newhw_blend[0] || hw_blend[1] != newhw_blend[1] || hw_blend[2] != newhw_blend[2] || hw_blend[3] != newhw_blend[3] || force)
 	{
 		float r,g,b,a;
+		static unsigned short		allramps[3*2048];
+		unsigned int rampsize = min(vid.gammarampsize, countof(allramps)/3);
+		unsigned short *ramps[3] = {&allramps[0],&allramps[rampsize],&allramps[rampsize*2]};
 		Vector4Copy(newhw_blend, hw_blend);
 
 		a = hw_blend[3];
@@ -857,7 +859,8 @@ void V_UpdatePalette (qboolean force)
 		b = 255*hw_blend[2]*a;
 
 		a = 1-a;
-		for (i=0 ; i<256 ; i++)
+		a *= 256.0/rampsize;
+		for (i=0 ; i < rampsize; i++)
 		{
 			ir = i*a + r;
 			ig = i*a + g;
@@ -869,6 +872,7 @@ void V_UpdatePalette (qboolean force)
 			if (ib > 255)
 				ib = 255;
 
+			//FIXME: shit precision
 			ramps[0][i] = gammatable[ir]<<8;
 			ramps[1][i] = gammatable[ig]<<8;
 			ramps[2][i] = gammatable[ib]<<8;
@@ -876,9 +880,9 @@ void V_UpdatePalette (qboolean force)
 
 		if (qrenderer)
 		{
-			applied = rf->VID_ApplyGammaRamps ((unsigned short*)ramps);
+			applied = rf->VID_ApplyGammaRamps (rampsize, allramps);
 			if (!applied && r2d_canhwgamma)
-				rf->VID_ApplyGammaRamps (NULL);
+				rf->VID_ApplyGammaRamps (0, NULL);
 			r2d_canhwgamma = applied;
 		}
 	}
@@ -1189,6 +1193,13 @@ void V_ApplyAFov(playerview_t *pv)
 			r_refdef.fov_x = CalcFov(r_refdef.fov_y, r_refdef.vrect.height, r_refdef.vrect.width*ws);
 		}
 	}
+	if (r_refdef.useperspective)
+	{
+		if (r_refdef.mindist < 1)
+			r_refdef.mindist = 1;
+		if (r_refdef.maxdist && r_refdef.maxdist < 100)
+			r_refdef.maxdist = 0;	//small values should just use infinite.
+	}
 }
 /*
 =================
@@ -1202,8 +1213,8 @@ void V_ApplyRefdef (void)
 #ifdef QUAKEHUD
 	float           size;
 	int             h;
-#endif
 	qboolean		full = false;
+#endif
 
 // force the status bar to redraw
 	Sbar_Changed ();
@@ -1437,6 +1448,8 @@ void V_CalcRefdef (playerview_t *pv)
 	VectorCopy (pv->simorg, r_refdef.vieworg);
 
 	r_refdef.useperspective = true;
+	r_refdef.mindist = bound(0.1, gl_mindist.value, 4);
+	r_refdef.maxdist = gl_maxdist.value;
 
 // never let it sit exactly on a node line, because a water plane can
 // dissapear when viewed with the eye exactly on it.
@@ -1642,8 +1655,6 @@ static void SCR_DrawAutoID(vec3_t org, player_info_t *pl, qboolean isteam)
 	vec3_t tagcenter;
 	float alpha;
 	qboolean obscured;
-	int health, armour;
-	unsigned int items;
 	int x, y;
 	int r;
 	float barwidth;
@@ -1652,6 +1663,9 @@ static void SCR_DrawAutoID(vec3_t org, player_info_t *pl, qboolean isteam)
 	int h;
 	char *pname;
 
+	int health;
+	int armour;
+	unsigned int items;
 	static vec4_t healthcolours[] =
 	{
 		{0.7, 0.45, 0.45, 1},
@@ -1660,6 +1674,7 @@ static void SCR_DrawAutoID(vec3_t org, player_info_t *pl, qboolean isteam)
 		{1, 0.4, 0, 1},
 		{1, 1, 1, 1}
 	};
+#ifdef QUAKESTATS
 	static vec4_t armourcolours[] =
 	{
 		{25, 170, 0, 0.2},
@@ -1670,7 +1685,6 @@ static void SCR_DrawAutoID(vec3_t org, player_info_t *pl, qboolean isteam)
 		{255, 0, 0, 1}
 	};
 
-#ifdef QUAKESTATS
 	extern cvar_t tp_name_sg,tp_name_ssg,tp_name_ng,tp_name_sng,tp_name_gl,tp_name_rl,tp_name_lg;
 	static cvar_t *wbitnames[] =
 	{
@@ -1823,6 +1837,9 @@ static void SCR_DrawAutoID(vec3_t org, player_info_t *pl, qboolean isteam)
 				Draw_ExpandedString(x + barwidth*0.5 + 4, y, buffer);
 		}
 	}
+#else
+	(void)items;
+	(void)armour;
 #endif
 }
 

@@ -983,12 +983,15 @@ static qboolean VID_SetFullDIBMode (rendererstate_t *info)
 			gdevmode.dmFields |= DM_BITSPERPEL;
 		if (info->rate)
 			gdevmode.dmFields |= DM_DISPLAYFREQUENCY;
-		gdevmode.dmBitsPerPel = info->bpp;
-		if (info->bpp && (gdevmode.dmBitsPerPel < 15))
-		{
+		if (info->bpp && (info->bpp < 15))
+		{	//low values get you a warning. otherwise only 16 and 32bit are allowed.
 			Con_Printf("Forcing at least 15bpp\n");
 			gdevmode.dmBitsPerPel = 16;
 		}
+		else if (info->bpp == 16)
+			gdevmode.dmBitsPerPel = 16;
+		else
+			gdevmode.dmBitsPerPel = 32;
 		gdevmode.dmDisplayFrequency = info->rate;
 		gdevmode.dmPelsWidth = info->width;
 		gdevmode.dmPelsHeight = info->height;
@@ -1318,14 +1321,23 @@ int GLVID_SetMode (rendererstate_t *info, unsigned char *palette)
 // fix the leftover Alt from any Alt-Tab or the like that switched us away
 	ClearAllStates ();
 
+	gammaworks = FALSE;
 	if (vid_desktopgamma.value)
 	{
 		HDC hDC = GetDC(GetDesktopWindow());
-		gammaworks = qGetDeviceGammaRamp(hDC, originalgammaramps);
+		if (qGetDeviceGammaRamp(hDC, originalgammaramps))
+			gammaworks = qSetDeviceGammaRamp(hDC, originalgammaramps);
 		ReleaseDC(GetDesktopWindow(), hDC);
 	}
 	else
-		gammaworks = qGetDeviceGammaRamp(maindc, originalgammaramps);
+	{
+		if (qGetDeviceGammaRamp(maindc, originalgammaramps))
+			gammaworks = qSetDeviceGammaRamp(maindc, originalgammaramps);
+	}
+	if (!gammaworks)
+		Con_Printf("Hardware gamma is not supported\n");
+	else
+		Con_DPrintf("Hardware gamma appears to work\n");
 
 	return true;
 }
@@ -1385,6 +1397,11 @@ void VID_UnSetMode (void)
 			DestroyWindow(mainwindow);
 		mainwindow = NULL;
 	}
+
+	if (WinNT)
+		UnregisterClassW(WINDOW_CLASS_NAME_W, global_hInstance);
+	else
+		UnregisterClassA(WINDOW_CLASS_NAME_A, global_hInstance);
 
 #if 0
 	//Logically this code should be active. However...
@@ -1710,10 +1727,6 @@ void GLVID_Recenter_f(void)
 	//int nx = 0;
 	//int ny = 0;
 
-#ifdef _MSC_VER
-#define strtoull _strtoui64
-#endif
-
 	if (Cmd_Argc() > 1)
 		sys_parentleft = atoi(Cmd_Argv(1));
 	if (Cmd_Argc() > 2)
@@ -1831,11 +1844,11 @@ void OblitterateOldGamma(void)
 	}
 }
 
-qboolean GLVID_ApplyGammaRamps (unsigned short *ramps)
+qboolean GLVID_ApplyGammaRamps (unsigned int gammarampsize, unsigned short *ramps)
 {
 	if (ramps)
 	{
-		if (!gammaworks)
+		if (!gammaworks || gammarampsize != 256)
 			return false;
 
 		if (vid_hardwaregamma.value == 1 && modestate == MS_WINDOWED)
@@ -2681,11 +2694,6 @@ void GLVID_DeInit (void)
 	Cvar_Unhook(&vid_vsync);
 	Cvar_Unhook(&vid_wndalpha);
 	Cmd_RemoveCommand("vid_recenter");
-
-	if (WinNT)
-		UnregisterClassW(WINDOW_CLASS_NAME_W, global_hInstance);
-	else
-		UnregisterClassA(WINDOW_CLASS_NAME_A, global_hInstance);
 }
 
 /*

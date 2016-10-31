@@ -13,6 +13,9 @@
 #include <ctype.h>
 #include "../../engine/common/netinc.h"
 
+#define handleisvalid(h) ((h)>=0)
+#define invalid_handle -1
+
 enum tlsmode_e
 {
 	TLS_OFF,
@@ -268,6 +271,28 @@ void IRC_SetFooter(ircclient_t *irc, const char *subname, const char *format, ..
 			pCon_SetConsoleString(lwr, "footer", string);
 	}
 }
+qboolean IRC_WindowShown(ircclient_t *irc, const char *subname)
+{
+	char lwr[128];
+	int i;
+	if (irc)
+	{
+		Q_strlcpy(lwr, irc->id, sizeof(lwr));
+		for (i = strlen(lwr); *subname && i < sizeof(lwr)-2; i++, subname++)
+		{
+			if (*subname >= 'A' && *subname <= 'Z')
+				lwr[i] = *subname - 'A' + 'a';
+			else
+				lwr[i] = *subname;
+		}
+	
+		lwr[i] = '\0';
+
+		if (BUILTINISVALID(Con_SetConsoleFloat) && pCon_GetConsoleFloat(lwr, "iswindow") < true)
+			return false;
+	}
+	return true;
+}
 void IRC_Printf(ircclient_t *irc, const char *subname, const char *format, ...)
 {
 	va_list		argptr;
@@ -466,6 +491,7 @@ ircclient_t *IRC_Create(const char *server, const char *nick, const char *realna
 	irc->connecting = true;
 	irc->tlsmode = TLS_OFF;
 	irc->quitting = false;
+	irc->socket = invalid_handle;
 
 	Q_strlcpy(irc->server, server, sizeof(irc->server));
 
@@ -512,7 +538,7 @@ qboolean IRC_Establish(ircclient_t *irc)
 	if (!irc)
 		return false;
 
-	if (irc->socket)	//don't need to do anything.
+	if (handleisvalid(irc->socket))	//don't need to do anything.
 		return true;
 
 	//clear up any stale state
@@ -524,7 +550,7 @@ qboolean IRC_Establish(ircclient_t *irc)
 
 	//not yet blocking. So no frequent attempts please...
 	//non blocking prevents connect from returning worthwhile sensible value.
-	if ((qintptr_t)irc->socket < 0)
+	if (!handleisvalid(irc->socket))
 	{
 		Con_Printf("IRC_OpenSocket: couldn't connect\n");
 		return false;
@@ -535,7 +561,7 @@ qboolean IRC_Establish(ircclient_t *irc)
 		if (pNet_SetTLSClient(irc->socket, irc->server) < 0)
 		{
 			pNet_Close(irc->socket);
-			irc->socket = 0;
+			irc->socket = invalid_handle;
 			return false;
 		}
 	}
@@ -635,12 +661,15 @@ void IRC_PartChannelInternal(ircclient_t *irc, char *channelname)
 			if (pwd)
 				*pwd++ = 0;
 
-			if (*irc->autochannels)
-				Q_strncatz(irc->autochannels, " ", sizeof(irc->autochannels));
-			if (pwd)
-				Q_strncatz(irc->autochannels, va("%s,%s", chan, pwd), sizeof(irc->autochannels));
-			else
-				Q_strncatz(irc->autochannels, va("%s", chan), sizeof(irc->autochannels));
+			if (strcmp(chan, channelname))
+			{
+				if (*irc->autochannels)
+					Q_strncatz(irc->autochannels, " ", sizeof(irc->autochannels));
+				if (pwd)
+					Q_strncatz(irc->autochannels, va("%s,%s", chan, pwd), sizeof(irc->autochannels));
+				else
+					Q_strncatz(irc->autochannels, va("%s", chan), sizeof(irc->autochannels));
+			}
 		}
 		chan = strtok(NULL, " ");
 	}
@@ -1045,7 +1074,7 @@ void numbered_command(int comm, char *msg, ircclient_t *irc) // move vars up 1 m
 			IRC_Printf(irc, DEFAULTCONSOLE, "%s\n", motdmessage);
 
 		if (*irc->autochannels)
-			IRC_JoinChannels(irc, irc->autochannels); // note to self... "" needs to be the channel key.. so autochannels needs a recoded
+			IRC_JoinChannels(irc, irc->autochannels);
 
 		return;
 	}
@@ -1174,7 +1203,7 @@ void numbered_command(int comm, char *msg, ircclient_t *irc) // move vars up 1 m
 	{
 		IRC_Printf(irc, DEFAULTCONSOLE, COLOURYELLOW "STARTTLS Failed: %s\n", casevar[3]);
 		pNet_Close(irc->socket);
-		irc->socket = 0;
+		irc->socket = invalid_handle;
 		return;
 	}
 	}
@@ -1606,7 +1635,7 @@ qintptr_t IRC_ConsoleLink(qintptr_t *args)
 
 	if (!strcmp(what, "reconnect"))
 	{
-		if (irc->socket)
+		if (handleisvalid(irc->socket))
 			IRC_Printf(irc, channel, "Already %s.\n", irc->connecting?"reconnecting":"connected");
 		else if (IRC_Establish(irc))
 			IRC_Printf(irc, channel, "Reconnecting...\n");
@@ -1725,7 +1754,6 @@ int IRC_ClientFrame(ircclient_t *irc)
 	char prefix[64];
 	int ret;
 	char *nextmsg, *msg;
-	char *raw;
 	char *temp;
 	char token[1024];
 	char var[9][1000];
@@ -1775,8 +1803,6 @@ int IRC_ClientFrame(ircclient_t *irc)
 	}
 
 	IRC_CvarUpdate(); // is this the right place for it?
-
-	raw = strtok(var[2], " ");
 
 //	if (irc_debug.value == 1) { IRC_Printf(irc, DEFAULTCONSOLE,COLOURRED "!!!!! ^11: %s ^22: %s ^33: %s ^44: %s ^55: %s ^66: %s ^77: %s ^88: %s\n",var[1],var[2],var[3],var[4],var[5],var[6],var[7],var[8]); }
 	if (irc_debug.value == 1) { IRC_Printf(irc, DEFAULTCONSOLE,COLOURRED "%s\n",var[1]); }
@@ -1874,32 +1900,29 @@ int IRC_ClientFrame(ircclient_t *irc)
 		}
 		else
 		{
+			etghack = strtok(var[1],"\n");
 
-		etghack = strtok(var[1],"\n");
+			if (!irc->connecting || IRC_WindowShown(irc, DEFAULTCONSOLE))
+				IRC_Printf(irc, DEFAULTCONSOLE, COLOURGREEN "SERVER NOTICE: <%s> %s\n", prefix, etghack);
 
-		IRC_Printf(irc, DEFAULTCONSOLE, COLOURGREEN "SERVER NOTICE: <%s> %s\n", prefix, etghack);
+//			strcpy(servername,prefix);
 
-//		strcpy(servername,prefix);
-
-		while (1)
-		{
-			etghack = strtok(NULL, "\n");
-
-			if (etghack == NULL)
+			while (1)
 			{
-				break;
-				break;
+				etghack = strtok(NULL, "\n");
+
+				if (etghack == NULL)
+					break;
+
+				magic_etghack(etghack);
+
+				if (atoi(subvar[2]) != 0)
+					numbered_command(atoi(subvar[2]), etghack, irc);
+				else
+					IRC_Printf(irc, DEFAULTCONSOLE, COLOURGREEN "SERVER NOTICE: <%s> %s\n", prefix, subvar[4]);
+
 			}
-
-			magic_etghack(etghack);
-
-			if (atoi(subvar[2]) != 0)
-				numbered_command(atoi(subvar[2]), etghack, irc);
-			else
-				IRC_Printf(irc, DEFAULTCONSOLE, COLOURGREEN "SERVER NOTICE: <%s> %s\n", prefix, subvar[4]);
-
 		}
-	}
 
 	}
 	else if (!strncmp(var[2], "PRIVMSG ", 7))	//no autoresponses to notice please, and any autoresponses should be in the form of a notice
@@ -2029,7 +2052,8 @@ int IRC_ClientFrame(ircclient_t *irc)
 		}
 		else
 		{
-			IRC_Printf(irc, channel,COLOURGREEN "%s sets mode %s\n",username,mode);
+			if (IRC_WindowShown(irc, channel))
+				IRC_Printf(irc, channel, COLOURGREEN "%s sets mode %s\n",username,mode);
 		}
 
 	}
@@ -2202,13 +2226,13 @@ int IRC_ClientFrame(ircclient_t *irc)
 
 	}
 	// would be great to convert the above to work better
-	else if (atoi(raw) != 0)
+	else if (atoi(var[2]) != 0)
 	{
 //		char *rawparameter = strtok(var[4], " ");
 //		char *rawmessage = var[5];
 //		char *wholerawmessage = var[4];
 
-		numbered_command(atoi(raw), msg, irc);
+		numbered_command(atoi(var[2]), msg, irc);
 
 		IRC_CvarUpdate();
 
@@ -2236,7 +2260,7 @@ qintptr_t IRC_Frame(qintptr_t *args)
 	for (ircclient = ircclients; ircclient; ircclient = ircclient->next)
 	{
 		int stat = IRC_CONTINUE;
-		if (!ircclient->socket)
+		if (!handleisvalid(ircclient->socket))
 			continue;	//this connection isn't enabled.
 		while(stat == IRC_CONTINUE)
 		{
@@ -2248,19 +2272,15 @@ qintptr_t IRC_Frame(qintptr_t *args)
 				{
 					memmove(ircclient->bufferedoutmessage, ircclient->bufferedoutmessage+flushed, ircclient->bufferedoutammount - flushed);
 					ircclient->bufferedoutammount -= flushed;
-
-					if (!ircclient->bufferedoutammount)
-					{
-						pNet_Close(ircclient->socket);
-						ircclient->socket = 0;
-					}
 				}
 			}
 		}
+		if (ircclient->quitting && !ircclient->bufferedoutammount)
+			stat = IRC_KILL;
 		if (stat == IRC_KILL)
 		{
 			pNet_Close(ircclient->socket);
-			ircclient->socket = 0;
+			ircclient->socket = invalid_handle;
 			IRC_Printf(ircclient, DEFAULTCONSOLE, "Disconnected from irc\n^[[Reconnect]\\act\\reconnect^]\n");
 			break;	//lazy
 		}
@@ -2340,13 +2360,65 @@ void IRC_Command(ircclient_t *ircclient, char *dest)
 
 			IRC_WriteConfig();
 		}
-		else if (!strcmp(token+1, "info"))
+		else if (!strcmp(token+1, "info") || !strcmp(token+1, "status"))
 		{
-			IRC_Printf(ircclient, dest, "to connect to a server: /connect SERVER \"#chan #chan2,chan2password\" NICK SERVERPASSWORD\n");
-			IRC_Printf(ircclient, dest, "to disconnect from a server: /quit\n");
-			IRC_Printf(ircclient, dest, "to join a channel: /join\n");
-			IRC_Printf(ircclient, dest, "to leave a channel: /part\n");
-			IRC_Printf(ircclient, dest, "note that servers and channels will be remembered\n");
+			ircclient_t *e;
+			struct ircice_s *ice;
+			for (e = ircclients; e; e = e->next)
+			{
+				IRC_Printf(ircclient, dest, "SERVER: %s\n", e->server);
+				if (e->connecting && handleisvalid(e->socket))
+					IRC_Printf(ircclient, dest, "<CONNECTING>\n");
+				else if (handleisvalid(e->socket))
+					IRC_Printf(ircclient, dest, "<CONNECTED>\n");
+				else
+					IRC_Printf(ircclient, dest, "<DISCONNECTED>\n");
+				if (e->quitting)
+					IRC_Printf(ircclient, dest, "<QUITTING>\n");
+				switch(e->tlsmode)
+				{
+				default:
+				case TLS_OFF:
+					IRC_Printf(ircclient, dest, "TLS: insecure\n");
+					break;
+				case TLS_INITIAL:
+					IRC_Printf(ircclient, dest, "TLS: initial\n");
+					break;
+				case TLS_START:
+				case TLS_STARTING:
+					IRC_Printf(ircclient, dest, "TLS: upgrade\n");
+					break;
+				}
+				IRC_Printf(ircclient, dest, "nick: %s\n", e->nick);
+				IRC_Printf(ircclient, dest, "realname: %s\n", e->realname);
+				IRC_Printf(ircclient, dest, "hostname: %s\n", e->hostname);
+				IRC_Printf(ircclient, dest, "rejoin: %s\n", *e->autochannels?e->autochannels:"<no channels>");
+				IRC_Printf(ircclient, dest, "default dest: %s\n", e->defaultdest);
+				for (ice = e->ice; ice; ice = ice->next)
+				{
+					char *allowed=ice->allowed?" allowed":" not-allowed";
+					char *accepted=ice->accepted?" accepted":" not-accepted";
+					switch(ice->type)
+					{
+					default:
+					case ICEP_INVALID:
+						IRC_Printf(ircclient, dest, " <INVALID ICE>\n");
+						break;
+					case ICEP_QWSERVER:
+						IRC_Printf(ircclient, dest, " server: \"%s\"%s%s\n", ice->peer, allowed, accepted);
+						break;
+					case ICEP_QWCLIENT:
+						IRC_Printf(ircclient, dest, " client: \"%s\"%s%s\n", ice->peer, allowed, accepted);
+						break;
+					case ICEP_VOICE:
+						IRC_Printf(ircclient, dest, " voice: \"%s\"%s%s\n", ice->peer, allowed, accepted);
+						break;
+					case ICEP_VIDEO:
+						IRC_Printf(ircclient, dest, " voice: \"%s\"%s%s\n", ice->peer, allowed, accepted);
+						break;
+					}
+				}
+			}
 		}
 		else if (!ircclient)
 		{
@@ -2514,7 +2586,7 @@ void IRC_Command(ircclient_t *ircclient, char *dest)
 				if(*msg <= ' ' && *msg)
 					msg++;
 				IRC_AddClientMessage(ircclient, va("PRIVMSG %s :\001ACTION %s\001", dest, msg));
-				IRC_Printf(ircclient, ircclient->defaultdest, "***%s %s\n", ircclient->nick, msg);
+				IRC_Printf(ircclient, ircclient->defaultdest, "***^3%s^7 %s\n", ircclient->nick, msg);
 			}
 		}
 	}
@@ -2522,7 +2594,7 @@ void IRC_Command(ircclient_t *ircclient, char *dest)
 	{
 		if (ircclient)
 		{
-			if (!ircclient->socket)
+			if (!handleisvalid(ircclient->socket))
 				IRC_Printf(ircclient, dest, "Connection was closed. use /reconnect\n");
 			else if (ircclient->tlsmode == TLS_STARTING || ircclient->connecting)
 				IRC_Printf(ircclient, dest, "Still connecting. Please wait.\n");
@@ -2538,7 +2610,7 @@ void IRC_Command(ircclient_t *ircclient, char *dest)
 				if (!*msg)
 					return;	//this is apparently an error. certainly wasteful.
 				IRC_AddClientMessage(ircclient, va("PRIVMSG %s :%s", dest, msg));
-				IRC_Printf(ircclient, dest, "%s: %s\n", ircclient->nick, msg);
+				IRC_Printf(ircclient, dest, "^3%s^7: %s\n", ircclient->nick, msg);
 			}
 		}
 		else

@@ -28,15 +28,19 @@ int Grep(char *filename, char *string)
 	char *last, *found, *linestart;
 	int line = 1;
 	int sz;
-	char *buf;
+	char *raw, *buf;
+	pbool dofree;
+	int origfmt;
 	if (!filename)
 		return foundcount;
 	sz = GUIFileSize(filename);
 	if (sz <= 0)
 		return foundcount;
-	buf = malloc(sz+1);
-	buf[sz] = 0;
-	GUIReadFile(filename, buf, sz, NULL);
+	raw = malloc(sz+2);
+	raw[sz] = 0;
+	GUIReadFile(filename, raw, sz, NULL);
+
+	buf = QCC_SanitizeCharSet(raw, &sz, &dofree, &origfmt);
 
 	linestart = last = found = buf;
 	while ((found = QC_strcasestr(found, string)))
@@ -60,7 +64,9 @@ int Grep(char *filename, char *string)
 		linestart = found;
 		foundcount++;
 	}
-	free(buf);
+	if (dofree)
+		free(buf);
+	free(raw);
 
 	return foundcount;
 }
@@ -99,21 +105,21 @@ void GoToDefinition(char *name)
 			if (fnum > 0 && fnum < numfunctions)
 			{
 				fnc = &functions[fnum];
-				if (fnc->code>=0 && fnc->s_file)
+				if (fnc->code>=0 && fnc->filen)
 				{
-					EditFile(strings+fnc->s_file, statements[fnc->code].linenum-1, false);
+					EditFile(fnc->filen, statements[fnc->code].linenum-1, false);
 					return;
 				}
 			}
 		}
-		if (!def->s_file)
+		if (!def->filen)
 		{
 			char msgbuffer[2048];
 			QC_snprintfz(msgbuffer, sizeof(msgbuffer), "Global definition of \"%s\" was not specified.", name);		
 			GUI_DialogPrint("Not found", msgbuffer);
 		}
 		else
-			EditFile(def->s_file+strings, def->s_line-1, false);
+			EditFile(def->filen, def->s_line-1, false);
 	}
 	else
 	{
@@ -413,6 +419,9 @@ void GUI_ParseCommandLine(char *args)
 
 	GUI_LoadConfig();
 
+	paramlen = strlen(parameters);
+	if (paramlen)
+		parameters[paramlen++] = ' ';
 	while(*args)
 	{
 		while (*args == ' ' || *args == '\t')
@@ -686,7 +695,7 @@ void GUI_RevealOptions(void)
 
 
 
-int GUI_BuildParms(char *args, char **argv, pbool quick)
+int GUI_BuildParms(char *args, char **argv, pbool quick)//, char *forceoutputfile)
 {
 	static char param[2048];
 	int paramlen = 0;
@@ -769,6 +778,12 @@ int GUI_BuildParms(char *args, char **argv, pbool quick)
 		paramlen += strlen(param+paramlen)+1;
 		args=next;
 	}*/
+
+//	if (*forceoutputfile)
+//	{
+//		argv[argc++] = "-destfile";
+//		argv[argc++] = forceoutputfile;
+//	}
 
 	if (*progssrcname)
 	{

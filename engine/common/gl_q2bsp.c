@@ -386,10 +386,10 @@ typedef struct cminfo_s
 
 static q2mapsurface_t	nullsurface;
 
-cvar_t		map_noareas			= SCVAR("map_noareas", "0");	//1 for lack of mod support.
-cvar_t		map_noCurves		= SCVARF("map_noCurves", "0", CVAR_CHEAT);
+cvar_t		map_noareas			= CVAR("map_noareas", "0");	//1 for lack of mod support.
+cvar_t		map_noCurves		= CVARF("map_noCurves", "0", CVAR_CHEAT);
 cvar_t		map_autoopenportals	= CVARD("map_autoopenportals", "0", "When set to 1, force-opens all area portals. Normally these start closed and are opened by doors when they move, but this requires the gamecode to signal this.");	//1 for lack of mod support.
-cvar_t		r_subdivisions		= SCVAR("r_subdivisions", "2");
+cvar_t		r_subdivisions		= CVAR("r_subdivisions", "2");
 
 static int		CM_NumInlineModels (model_t *model);
 static cmodel_t	*CM_InlineModel (model_t *model, char *name);
@@ -1308,7 +1308,7 @@ qboolean CModQ2_LoadTexInfo (model_t *mod, qbyte *mod_base, lump_t *l, char *map
 	q2texinfo_t *in;
 	mtexinfo_t *out;
 	int 	i, j, count;
-	char	name[MAX_QPATH], *lwr;
+	char	*lwr;
 	char	sname[MAX_QPATH];
 	int texcount;
 
@@ -1393,7 +1393,7 @@ qboolean CModQ2_LoadTexInfo (model_t *mod, qbyte *mod_base, lump_t *l, char *map
 			{
 				out->texture = ZG_Malloc(&mod->memgroup, sizeof(texture_t) + 16*16+8*8+4*4+2*2);
 
-				Con_Printf (CON_WARNING "Couldn't load %s\n", name);
+				Con_Printf (CON_WARNING "Couldn't load \"%s.wal\"\n", in->texture);
 				memcpy(out->texture, r_notexture_mip, sizeof(texture_t) + 16*16+8*8+4*4+2*2);
 			}
 

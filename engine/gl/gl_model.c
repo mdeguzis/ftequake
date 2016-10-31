@@ -541,6 +541,10 @@ void Mod_Purge(enum mod_purge_e ptype)
 			Z_Free(mod->entities);
 			mod->entities = NULL;
 
+#ifdef PSET_SCRIPT
+			PScript_ClearSurfaceParticles(mod);
+#endif
+
 			//and obliterate anything else remaining in memory.
 			ZG_FreeGroup(&mod->memgroup);
 			mod->meshinfo = NULL;
@@ -1056,6 +1060,8 @@ void Mod_LoadModelWorker (void *ctx, void *data, size_t a, size_t b)
 		!strncmp(mod->name, "progs/v_", 8))
 		mod->engineflags &= ~MDLF_EZQUAKEFBCHEAT;
 
+	mod->engineflags |= MDLF_RECALCULATERAIN;
+
 	// get string used for replacement tokens
 	COM_FileExtension(mod->name, ext, sizeof(ext));
 	if (!Q_strcasecmp(ext, "spr") || !Q_strcasecmp(ext, "sp2"))
@@ -1109,13 +1115,21 @@ void Mod_LoadModelWorker (void *ctx, void *data, size_t a, size_t b)
 		}
 		if (!buf)
 			continue;
-	
+		if (filesize < 4)
+		{
+			BZ_Free(buf);
+			continue;
+		}
+
 //
 // fill it in
 //
 		Mod_DoCRC(mod, (char*)buf, filesize);
 
-		magic = LittleLong(*(unsigned *)buf);
+		if (filesize < 4)
+			magic = 0;
+		else
+			magic = LittleLong(*(unsigned *)buf);
 		for(i = 0; i < sizeof(modelloaders) / sizeof(modelloaders[0]); i++)
 		{
 			if (modelloaders[i].load && modelloaders[i].magic == magic && !modelloaders[i].ident)
@@ -1147,7 +1161,7 @@ void Mod_LoadModelWorker (void *ctx, void *data, size_t a, size_t b)
 			}
 			else
 			{
-				Con_Printf(CON_WARNING "Unrecognised model format 0x%x (%c%c%c%c)\n", LittleLong(*(unsigned *)buf), ((char*)buf)[0], ((char*)buf)[1], ((char*)buf)[2], ((char*)buf)[3]);
+				Con_Printf(CON_WARNING "Unrecognised model format 0x%x (%c%c%c%c)\n", magic, ((char*)buf)[0], ((char*)buf)[1], ((char*)buf)[2], ((char*)buf)[3]);
 				BZ_Free(buf);
 				continue;
 			}
@@ -2073,6 +2087,7 @@ void Mod_LoadVisibility (model_t *loadmodel, qbyte *mod_base, lump_t *l, qbyte *
 	memcpy (loadmodel->visdata, ptr, len);
 }
 
+//scans through the worldspawn for a single specific key.
 char *Mod_ParseWorldspawnKey(const char *ents, const char *key, char *buffer, size_t sizeofbuffer)
 {
 	char keyname[64];
@@ -2152,6 +2167,11 @@ void Mod_LoadEntities (model_t *loadmodel, qbyte *mod_base, lump_t *l)
 {
 	char fname[MAX_QPATH];
 	size_t sz;
+	char keyname[64];
+	char value[1024];
+	char *ents, *k;
+	int t;
+
 	loadmodel->entitiescrc = 0;
 	loadmodel->entities = NULL;
 	if (!l->filelen)
@@ -2187,6 +2207,37 @@ void Mod_LoadEntities (model_t *loadmodel, qbyte *mod_base, lump_t *l)
 	}
 	else
 		loadmodel->entitiescrc = QCRC_Block(loadmodel->entities, strlen(loadmodel->entities));
+
+	ents = loadmodel->entities;
+	while(ents && *ents)
+	{
+		ents = COM_ParseOut(ents, keyname, sizeof(keyname));
+		if (*keyname == '{')	//an entity
+		{
+			while (ents && *ents)
+			{
+				ents = COM_ParseOut(ents, keyname, sizeof(keyname));
+				if (*keyname == '}')
+					break;
+				ents = COM_ParseOut(ents, value, sizeof(value));
+				if (!strncmp(keyname, "_texpart_", 9) || !strncmp(keyname, "texpart_", 8))
+				{
+					k = keyname + ((*keyname=='_')?9:8);
+					for (t = 0; t < loadmodel->numtextures; t++)
+					{
+						if (!strcmp(k, loadmodel->textures[t]->name))
+						{
+							loadmodel->textures[t]->partname = ZG_Malloc(&loadmodel->memgroup, strlen(value)+1);
+							strcpy(loadmodel->textures[t]->partname, value);
+							break;
+						}
+					}
+					if (t == loadmodel->numtextures)
+						Con_Printf("\"%s\" is not valid for %s\n", keyname, loadmodel->name);
+				}
+			}
+		}
+	}
 }
 
 
@@ -5095,6 +5146,7 @@ static void * Mod_LoadSpriteGroup (model_t *mod, void * pin, void *pend, msprite
 	dspriteinterval_t	*pin_intervals;
 	float				*poutintervals;
 	void				*ptemp;
+	float				prevtime;
 
 	pingroup = (dspritegroup_t *)pin;
 
@@ -5112,7 +5164,7 @@ static void * Mod_LoadSpriteGroup (model_t *mod, void * pin, void *pend, msprite
 
 	pspritegroup->intervals = poutintervals;
 
-	for (i=0 ; i<numframes ; i++)
+	for (i=0, prevtime=0 ; i<numframes ; i++)
 	{
 		*poutintervals = LittleFloat (pin_intervals->interval);
 		if (*poutintervals <= 0.0)
@@ -5120,6 +5172,7 @@ static void * Mod_LoadSpriteGroup (model_t *mod, void * pin, void *pend, msprite
 			Con_Printf (CON_ERROR "Mod_LoadSpriteGroup: interval<=0\n");
 			return NULL;
 		}
+		prevtime = *poutintervals = prevtime+*poutintervals;
 
 		poutintervals++;
 		pin_intervals++;

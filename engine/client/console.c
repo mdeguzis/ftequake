@@ -58,14 +58,14 @@ qterm_t *activeqterm;
 float		con_cursorspeed = 4;
 
 
-cvar_t		con_numnotifylines = SCVAR("con_notifylines","4");		//max lines to show
-cvar_t		con_notifytime = SCVAR("con_notifytime","3");		//seconds
-cvar_t		con_notify_x = SCVAR("con_notify_x","0");
-cvar_t		con_notify_y = SCVAR("con_notify_y","0");
-cvar_t		con_notify_w = SCVAR("con_notify_w","1");
-cvar_t		con_centernotify = SCVAR("con_centernotify", "0");
-cvar_t		con_displaypossibilities = SCVAR("con_displaypossibilities", "1");
-cvar_t		con_maxlines = SCVAR("con_maxlines", "1024");
+cvar_t		con_numnotifylines = CVAR("con_notifylines","4");		//max lines to show
+cvar_t		con_notifytime = CVAR("con_notifytime","3");		//seconds
+cvar_t		con_notify_x = CVAR("con_notify_x","0");
+cvar_t		con_notify_y = CVAR("con_notify_y","0");
+cvar_t		con_notify_w = CVAR("con_notify_w","1");
+cvar_t		con_centernotify = CVAR("con_centernotify", "0");
+cvar_t		con_displaypossibilities = CVAR("con_displaypossibilities", "1");
+cvar_t		con_maxlines = CVAR("con_maxlines", "1024");
 cvar_t		cl_chatmode = CVARD("cl_chatmode", "2", "0(nq) - everything is assumed to be a console command. prefix with 'say', or just use a messagemode bind\n1(q3) - everything is assumed to be chat, unless its prefixed with a /\n2(qw) - anything explicitly recognised as a command will be used as a command, anything unrecognised will be a chat message.\n/ prefix is supported in all cases.\nctrl held when pressing enter always makes any implicit chat into team chat instead.");
 cvar_t		con_numnotifylines_chat = CVAR("con_numnotifylines_chat", "8");
 cvar_t		con_notifytime_chat = CVAR("con_notifytime_chat", "8");
@@ -1257,7 +1257,7 @@ int Con_DrawInput (console_t *con, qboolean focused, int left, int right, int y,
 					textstart[p+cmdstart] = (unsigned int)fname[p] | (COLOR_GREEN<<CON_FGSHIFT);
 				if (p < key_linepos-cmdstart)
 					p = key_linepos-cmdstart;
-				p = min(p+cmdstart, sizeof(maskedtext)/sizeof(maskedtext[0]) - 2);
+				p = min(p+cmdstart, sizeof(maskedtext)/sizeof(maskedtext[0]) - 3);
 				textstart[p] = 0;
 				textstart[p+1] = 0;
 			}
@@ -2401,13 +2401,16 @@ void Con_DrawConsole (int lines, qboolean noback)
 		srect.y = (1-srect.y) - srect.height;
 		if (srect.width && srect.height)
 		{
-			R2D_ImageColours(0, 0.1, 0.2, 1.0);
-			if ((w->buttonsdown & CB_SIZELEFT) || (con_curwindow==w && w->mousecursor[0] >= -8 && w->mousecursor[0] < 0 && w->mousecursor[1] >= 8 && w->mousecursor[1] < w->wnd_h))
-				R2D_FillBlock(w->wnd_x, w->wnd_y+8, 8, w->wnd_h-8);
-			if ((w->buttonsdown & CB_SIZERIGHT) || (con_curwindow==w && w->mousecursor[0] >= w->wnd_w-16 && w->mousecursor[0] < w->wnd_w-8 && w->mousecursor[1] >= 8 && w->mousecursor[1] < w->wnd_h))
-				R2D_FillBlock(w->wnd_x+w->wnd_w-8, w->wnd_y+8, 8, w->wnd_h-8);
-			if ((w->buttonsdown & CB_SIZEBOTTOM) || (con_curwindow==w && w->mousecursor[0] >= -8 && w->mousecursor[0] < w->wnd_w-8 && w->mousecursor[1] >= w->wnd_h-8 && w->mousecursor[1] < w->wnd_h))
-				R2D_FillBlock(w->wnd_x, w->wnd_y+w->wnd_h-8, w->wnd_w, 8);
+			if (!fadetime)
+			{
+				R2D_ImageColours(0, 0.1, 0.2, 1.0);
+				if ((w->buttonsdown & CB_SIZELEFT) || (con_curwindow==w && w->mousecursor[0] >= -8 && w->mousecursor[0] < 0 && w->mousecursor[1] >= 8 && w->mousecursor[1] < w->wnd_h))
+					R2D_FillBlock(w->wnd_x, w->wnd_y+8, 8, w->wnd_h-8);
+				if ((w->buttonsdown & CB_SIZERIGHT) || (con_curwindow==w && w->mousecursor[0] >= w->wnd_w-16 && w->mousecursor[0] < w->wnd_w-8 && w->mousecursor[1] >= 8 && w->mousecursor[1] < w->wnd_h))
+					R2D_FillBlock(w->wnd_x+w->wnd_w-8, w->wnd_y+8, 8, w->wnd_h-8);
+				if ((w->buttonsdown & CB_SIZEBOTTOM) || (con_curwindow==w && w->mousecursor[0] >= -8 && w->mousecursor[0] < w->wnd_w-8 && w->mousecursor[1] >= w->wnd_h-8 && w->mousecursor[1] < w->wnd_h))
+					R2D_FillBlock(w->wnd_x, w->wnd_y+w->wnd_h-8, w->wnd_w, 8);
+			}
 			if (R2D_Flush)
 				R2D_Flush();
 			BE_Scissor(&srect);
